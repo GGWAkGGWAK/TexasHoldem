@@ -5,6 +5,9 @@ using UnityEngine;
 public class Hands : MonoBehaviour
 {
     public int handLevel;
+
+    public List<int> playerHand = new List<int>();
+
     void Start()
     {
         
