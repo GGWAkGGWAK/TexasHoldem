@@ -7,6 +7,7 @@ public class Card : MonoBehaviour
     public int cardShape;
     public int cardNumber;
     public Sprite cardImage;
+    
 
     private Rigidbody2D rigid;
     
