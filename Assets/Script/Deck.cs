@@ -7,11 +7,20 @@ public class Deck : MonoBehaviour
     public List<int> deck = new List<int>();
     void Start()
     {
-
+        InitializeDeck();
+        ShuffleDeck();
     }
 
+    public void InitializeDeck()      //µ¦ »ý¼º
+    {
+        deck.Clear();
+        for (int i = 0; i < 52; i++)
+        {
+            deck.Add(i);
+        }
+    }
 
-    public void ShuffleDeck()
+    public void ShuffleDeck()       //µ¦ ¼ÅÇÃ
     {
         deck.Clear();
         for (int i = 0; i < deck.Count; i++)

@@ -4,21 +4,22 @@ using UnityEngine;
 
 public class Card : MonoBehaviour
 {
-    public int cardShape;
-    public int cardNumber;
-    public Sprite cardImage;
-    
-
+    public CardData cardData;
+    private SpriteRenderer spriteRenderer;
     private Rigidbody2D rigid;
     
-    void Start()
+    void Awake()
     {
         rigid = GetComponent<Rigidbody2D>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
     }
-
-    // Update is called once per frame
     void Update()
     {
-        
+        cardData.cardImage = gameObject.transform.GetChild(0).gameObject.GetComponent<SpriteRenderer>().sprite;
+    }
+    public void Initialize(CardData data)
+    {
+        cardData = data;
+        spriteRenderer.sprite = data.cardImage;
     }
 }
