@@ -6,7 +6,7 @@ public class Hands : MonoBehaviour
 {
     public int handLevel;
 
-    public List<int> playerHand = new List<int>();
+    public List<Card> playerHand = new List<Card>();
 
     void Start()
     {

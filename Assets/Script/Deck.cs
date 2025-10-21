@@ -4,38 +4,19 @@ using UnityEngine;
 
 public class Deck : MonoBehaviour
 {
-    public List<Card> deck = new List<Card>();
-    private List<Card> originalDeck = new List<Card>();
-    public GameObject cardPrefab;
+    public List<Card> deck = new List<Card>();      //ÇöÀç µ¦
+    [SerializeField]
+    private List<Card> originalDeck = new List<Card>();     //±âº» µ¦
     void Start()
     {
-        FindOriginalDeck();
-
+        InitializeDeck();
         ShuffleDeck();
-    }
-    public void FindOriginalDeck()
-    {
-        Deck originalDeckObject = GameObject.FindWithTag("OriginalDeck").GetComponent<Deck>();
-        originalDeck = originalDeckObject.deck;
     }
     public void InitializeDeck()      //µ¦ »ý¼º
     {
         deck.Clear();
-        /*for (int i = 0; i < originalDeck.Count; i++)
-        {
-            // 1) CardData °¡Á®¿À±â
-            CardData data = originalDeck[i].cardData;
-
-            // 2) »õ·Î¿î Card ¿ÀºêÁ§Æ® »ý¼º
-            GameObject cardObj = Instantiate(cardPrefab, this.transform);
-            Card newCard = cardObj.GetComponent<Card>();
-
-            // 3) CardData ÁÖÀÔ
-            newCard.Initialize(data);
-
-            // 4) µ¦¿¡ Ãß°¡
-            deck.Add(newCard);
-        }*/
+        deck = originalDeck;
+        Debug.Log("µ¦ »ý¼º");
     }
 
     public void ShuffleDeck()       //µ¦ ¼ÅÇÃ
