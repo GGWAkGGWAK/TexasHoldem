@@ -16,12 +16,13 @@ public class Deck : MonoBehaviour
     public void InitializeDeck()      //µ¦ ÃÊ±âÈ­ ¹× »ý¼º
     {
         deck.Clear();
-        deck = originalDeck;
+        deck.AddRange(originalDeck);
         Debug.Log("µ¦ »ý¼º");
     }
 
     public void ShuffleDeck()       //µ¦ ¼ÅÇÃ
     {
+        InitializeDeck();
         for (int i = 0; i < deck.Count; i++)
         {
             int randIndex = Random.Range(i, deck.Count);
@@ -49,5 +50,27 @@ public class Deck : MonoBehaviour
             }
         }
         Debug.Log($"ÇöÀç Âø¼®ÁßÀÎ ÁÂ¼® ¼ö: {seats.Count}");
+        if (deck.Count > 0)
+        {
+            for (int i = 0; i < seats.Count; i++)           //ÇÃ¶ø1
+            {
+
+                Debug.Log(deck[0]);
+                deck.RemoveAt(0);
+            }
+
+            for (int i = 0; i < seats.Count; i++)           //ÇÃ¶ø2
+            {
+
+                Debug.Log(deck[0]);
+                deck.RemoveAt(0);
+            }
+        }
+        else
+        {
+            Debug.Log("Âø¼®ÁßÀÎ ÇÃ·¹ÀÌ¾î X");
+        }
+        
+        
     }
 }
