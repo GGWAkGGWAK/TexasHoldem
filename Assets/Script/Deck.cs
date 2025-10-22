@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class Deck : MonoBehaviour
 {
+    public List<Seat> seats = new List<Seat>();
     public List<Card> deck = new List<Card>();      //ÇöÀç µ¦
     [SerializeField]
     private List<Card> originalDeck = new List<Card>();     //±âº» µ¦
@@ -12,7 +13,7 @@ public class Deck : MonoBehaviour
         InitializeDeck();
         ShuffleDeck();
     }
-    public void InitializeDeck()      //µ¦ »ý¼º
+    public void InitializeDeck()      //µ¦ ÃÊ±âÈ­ ¹× »ý¼º
     {
         deck.Clear();
         deck = originalDeck;
@@ -33,6 +34,20 @@ public class Deck : MonoBehaviour
 
     public void DrawingCard()       //Ä«µå³ª´²ÁÖ±â
     {
-        
+        seats.Clear();
+
+        GameObject[] allSeats = GameObject.FindGameObjectsWithTag("Seat");
+
+        for(int i = 0; i< allSeats.Length; i++)
+        {
+            GameObject seatObj = allSeats[i];
+            Seat seat = seatObj.GetComponent<Seat>();
+
+            if(seat!=null && seat.isSeated)
+            {
+                seats.Add(seat);
+            }
+        }
+        Debug.Log($"ÇöÀç Âø¼®ÁßÀÎ ÁÂ¼® ¼ö: {seats.Count}");
     }
 }
