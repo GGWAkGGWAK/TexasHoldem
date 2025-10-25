@@ -1,29 +1,93 @@
-using System.Collections;
+ï»¿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-
+using UnityEngine.UI;
 public class Player : MonoBehaviour
 {
-    public int playerChip;      //ÇÃ·¹ÀÌ¾î Ä¨
-    public bool canPlay;        //ÆÌÂü¿© »óÅÂÀÎÁö
-    public bool isMyTurn;       //³ªÀÇ ÅÏÀÎÁö
+    public int playerChip;      //í”Œë ˆì´ì–´ ì¹©
+    public bool canPlay;        //íŒŸì°¸ì—¬ ìƒíƒœì¸ì§€
+    public bool isMyTurn;       //ë‚˜ì˜ í„´ì¸ì§€
+
+    private bool isAdjustingRaise = false;
+    private int raiseStep = 10000;
 
     [SerializeField]
     private GamaManager gm;
+    [SerializeField]
+    private Slider raiseSlider;
+    [SerializeField]
+    private Text raiseValueText;
+    [SerializeField]
+    private GameObject raisePanel;
+
     private void Awake()
     {
         gm = GameObject.FindGameObjectWithTag("GameManager").GetComponent<GamaManager>();
+
+        Transform canvas = GameObject.Find("Canvas").transform;
+        raisePanel = canvas.Find("RaisePanel").gameObject;
+        raiseSlider = raisePanel.transform.Find("RaiseSlider").GetComponent<Slider>();
+        raiseValueText = raisePanel.transform.Find("RaiseValueText").GetComponent<Text>();
+
+        raisePanel.SetActive(false); // ì²˜ìŒì—” êº¼ë‘ê¸°
     }
     void Start()
     {
         playerChip = 3000000;
+        raiseSlider.onValueChanged.AddListener(_ => SnapSliderValue());
     }
     void Update()
     {
-        
-    }
 
-    public void Betting(int chip)       //º£ÆÃ
+    }
+    private void InitializeRaiseSlider()
+    {
+        int minRaise = (gm.beforeRaiseChip == 0)
+            ? gm.BigBlind * 2
+            : gm.beforeBettingChip + gm.beforeRaiseChip;
+
+        raiseSlider.minValue = minRaise;
+        raiseSlider.maxValue = playerChip;
+
+        // ì´ë²¤íŠ¸ ë°œìƒ ì—†ì´ ì´ˆê¸°ê°’ ì„¤ì •
+        raiseSlider.SetValueWithoutNotify(minRaise);
+        // í‘œì‹œ ê°±ì‹ 
+        raiseValueText.text = minRaise.ToString("N0");
+    }
+    public void OnRaiseButtonClicked()
+    {
+        if (!isAdjustingRaise)
+        {
+            // 1ï¸âƒ£ ì²« í´ë¦­ â†’ ìŠ¬ë¼ì´ë” íŒ¨ë„ í™œì„±í™”
+            isAdjustingRaise = true;
+            raisePanel.SetActive(true);
+            InitializeRaiseSlider();
+
+            Debug.Log("ìŠ¬ë¼ì´ë” í™œì„±í™” (Raise ê¸ˆì•¡ ì¡°ì • ì¤‘)");
+        }
+        else
+        {
+            // 2ï¸âƒ£ ë‘ ë²ˆì§¸ í´ë¦­ â†’ Raise ì‹¤í–‰ & íŒ¨ë„ ë¹„í™œì„±í™”
+            isAdjustingRaise = false;
+            raisePanel.SetActive(false);
+
+            int chipAmount = Mathf.RoundToInt(raiseSlider.value);
+            Raise(chipAmount);
+
+            Debug.Log($"ë ˆì´ì¦ˆ ì‹¤í–‰! ê¸ˆì•¡: {chipAmount}");
+        }
+    }
+    private void SnapSliderValue()
+    {
+        float snapped = Mathf.Floor(raiseSlider.value / raiseStep) * raiseStep;
+
+        // ì´ë¯¸ ìŠ¤ëƒ…ëœ ê°’ì´ë©´ ì´ë²¤íŠ¸ ë£¨í”„ ë°©ì§€
+        if (!Mathf.Approximately(snapped, raiseSlider.value))
+            raiseSlider.SetValueWithoutNotify(snapped);
+
+        raiseValueText.text = ((int)snapped).ToString("N0");
+    }
+    public void Betting(int chip)       //ë² íŒ…
     {
 
         if (chip >= playerChip)
@@ -43,7 +107,7 @@ public class Player : MonoBehaviour
             }
         }
     }
-    public void Call()                  //Äİ
+    public void Call()                  //ì½œ
     {
         int toCall = gm.beforeBettingChip;
         if (playerChip >= toCall)
@@ -57,28 +121,28 @@ public class Player : MonoBehaviour
             Allin();
         }
     }
-    public void Fold()                  //Æúµå
+    public void Fold()                  //í´ë“œ
     {
         canPlay = false;
         isMyTurn = false;
     }
-    public void Check()                 //Ã¼Å©
+    public void Check()                 //ì²´í¬
     {
         isMyTurn = false;
     }
-    public void Raise(int chip)                 //·¹ÀÌÁî
+    public void Raise(int chip)                 //ë ˆì´ì¦ˆ
     {
-        //ÇöÀç Äİ ÇØ¾ß ÇÏ´Â ±İ¾×
+        //í˜„ì¬ ì½œ í•´ì•¼ í•˜ëŠ” ê¸ˆì•¡
         int currentToCall = gm.beforeBettingChip;
 
-        // Ã¹ ·¹ÀÌÁî: ¹«Á¶°Ç ºòºí¶óÀÎµåÀÇ 2¹è ÀÌ»ó
+        // ì²« ë ˆì´ì¦ˆ: ë¬´ì¡°ê±´ ë¹…ë¸”ë¼ì¸ë“œì˜ 2ë°° ì´ìƒ
         if(gm.beforeRaiseChip == 0)
         {
             int minTo = gm.BigBlind * 2;
             if(chip >= minTo)
             {
                 gm.pots += chip;
-                gm.beforeRaiseChip = chip - currentToCall;      //ÀÌ¹ø ·¹ÀÌÁîÀÇ Å©±â ÀúÀå
+                gm.beforeRaiseChip = chip - currentToCall;      //ì´ë²ˆ ë ˆì´ì¦ˆì˜ í¬ê¸° ì €ì¥
                 gm.beforeBettingChip = chip;
                 playerChip -= chip;
                 isMyTurn = false;
@@ -86,7 +150,7 @@ public class Player : MonoBehaviour
         }
         else
         {
-            int minTo = currentToCall + gm.beforeRaiseChip;     //µÎ¹øÂ° ·¹ÀÌÁî ºÎÅÍ´Â ÃÖ¼Ò ·¹ÀÌÁî Å©±â = Á÷Àü ·¹ÀÌÁîÀÇ Å©±â
+            int minTo = currentToCall + gm.beforeRaiseChip;     //ë‘ë²ˆì§¸ ë ˆì´ì¦ˆ ë¶€í„°ëŠ” ìµœì†Œ ë ˆì´ì¦ˆ í¬ê¸° = ì§ì „ ë ˆì´ì¦ˆì˜ í¬ê¸°
 
             if (chip >= minTo)
             {
@@ -98,42 +162,42 @@ public class Player : MonoBehaviour
             }
         }
     }
-    public void Allin()         //¿ÃÀÎ
+    public void Allin()         //ì˜¬ì¸
     {
         if (playerChip <= 0)
         {
-            Debug.LogWarning("¿ÃÀÎ ºÒ°¡: ³²Àº Ä¨ÀÌ ¾ø½À´Ï´Ù.");
+            Debug.LogWarning("ì˜¬ì¸ ë¶ˆê°€: ë‚¨ì€ ì¹©ì´ ì—†ìŠµë‹ˆë‹¤.");
             return;
         }
 
-        int allinAmount = playerChip;        // ¿ÃÀÎ ±İ¾×
-        int toCall = gm.beforeBettingChip;   // ÇöÀç ÄİÇØ¾ß ÇÏ´Â ±İ¾×
+        int allinAmount = playerChip;        // ì˜¬ì¸ ê¸ˆì•¡
+        int toCall = gm.beforeBettingChip;   // í˜„ì¬ ì½œí•´ì•¼ í•˜ëŠ” ê¸ˆì•¡
 
-        // ÆÌ¿¡ Ä¨ Ãß°¡
+        // íŒŸì— ì¹© ì¶”ê°€
         gm.pots += allinAmount;
 
-        // Ä¨ ¼Ò¸ğ ¹× ÅÏ Á¾·á
+        // ì¹© ì†Œëª¨ ë° í„´ ì¢…ë£Œ
         playerChip = 0;
         isMyTurn = false;
 
-        // Á¶°Ç 1: ¿ÃÀÎ Ä¨ÀÌ Äİ ±İ¾×º¸´Ù ÀûÀ¸¸é => ´Ü¼ø Äİ·Î °£ÁÖ
+        // ì¡°ê±´ 1: ì˜¬ì¸ ì¹©ì´ ì½œ ê¸ˆì•¡ë³´ë‹¤ ì ìœ¼ë©´ => ë‹¨ìˆœ ì½œë¡œ ê°„ì£¼
         if (allinAmount < toCall)
         {
             return;
         }
 
-        // Á¶°Ç 2: ¿ÃÀÎ ±İ¾×ÀÌ Äİ ±İ¾×º¸´Ù ¸¹À¸¸é => ·¹ÀÌÁî·Î ÀÎÁ¤
+        // ì¡°ê±´ 2: ì˜¬ì¸ ê¸ˆì•¡ì´ ì½œ ê¸ˆì•¡ë³´ë‹¤ ë§ìœ¼ë©´ => ë ˆì´ì¦ˆë¡œ ì¸ì •
         if (allinAmount > toCall)
         {
-            int raiseSize = allinAmount - toCall;  // ÀÌ¹ø¿¡ Áõ°¡ÇÑ ±İ¾×
+            int raiseSize = allinAmount - toCall;  // ì´ë²ˆì— ì¦ê°€í•œ ê¸ˆì•¡
 
-            // Ã¹ ·¹ÀÌÁî¶ó¸é
+            // ì²« ë ˆì´ì¦ˆë¼ë©´
             if (gm.beforeRaiseChip == 0)
             {
                 gm.beforeRaiseChip = raiseSize;
                 gm.beforeBettingChip = allinAmount;
             }
-            else // µÎ ¹øÂ° ÀÌ»ó ·¹ÀÌÁî
+            else // ë‘ ë²ˆì§¸ ì´ìƒ ë ˆì´ì¦ˆ
             {
                 gm.beforeRaiseChip = raiseSize;
                 gm.beforeBettingChip = allinAmount;
@@ -141,7 +205,7 @@ public class Player : MonoBehaviour
         }
         else
         {
-            // Á¤È®È÷ Äİ ±İ¾× == ¿ÃÀÎ ±İ¾×ÀÏ ¶§ ¡æ ´Ü¼ø Äİ
+            // ì •í™•íˆ ì½œ ê¸ˆì•¡ == ì˜¬ì¸ ê¸ˆì•¡ì¼ ë•Œ â†’ ë‹¨ìˆœ ì½œ
             return;
         }
     }
