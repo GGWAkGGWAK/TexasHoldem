@@ -13,7 +13,7 @@ public class GamaManager : MonoBehaviour
     public int beforeBettingChip;       //직전 베팅칩
     public int beforeRaiseChip;         //베팅칩과 레이즈 칩의 차액
 
-    public Text potsText;
+    public Text potsText;           //팟 텍스트
 
     private void Awake()
     {

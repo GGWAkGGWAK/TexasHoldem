@@ -14,6 +14,8 @@ public class Player : MonoBehaviour
     [SerializeField]
     private GamaManager gm;
     [SerializeField]
+    private Deck deck;
+    [SerializeField]
     private Slider raiseSlider;
     [SerializeField]
     private Text raiseValueText;
@@ -22,8 +24,8 @@ public class Player : MonoBehaviour
 
     private void Awake()
     {
-        gm = GameObject.FindGameObjectWithTag("GameManager").GetComponent<GamaManager>();
-
+        gm = GameObject.Find("GameManager").GetComponent<GamaManager>();
+        deck = GameObject.Find("Deck").GetComponent<Deck>();
         Transform canvas = GameObject.Find("Canvas").transform;
         raisePanel = canvas.Find("RaisePanel").gameObject;
         raiseSlider = raisePanel.transform.Find("RaiseSlider").GetComponent<Slider>();
@@ -34,6 +36,8 @@ public class Player : MonoBehaviour
     void Start()
     {
         playerChip = 3000000;
+        isMyTurn = false;
+        canPlay = true;
         raiseSlider.onValueChanged.AddListener(_ => SnapSliderValue());
     }
     void Update()
@@ -56,25 +60,32 @@ public class Player : MonoBehaviour
     }
     public void OnRaiseButtonClicked()
     {
-        if (!isAdjustingRaise)
+        if (isMyTurn)
         {
-            // 1️⃣ 첫 클릭 → 슬라이더 패널 활성화
-            isAdjustingRaise = true;
-            raisePanel.SetActive(true);
-            InitializeRaiseSlider();
+            if (!isAdjustingRaise)
+            {
+                // 1️⃣ 첫 클릭 → 슬라이더 패널 활성화
+                isAdjustingRaise = true;
+                raisePanel.SetActive(true);
+                InitializeRaiseSlider();
 
-            Debug.Log("슬라이더 활성화 (Raise 금액 조정 중)");
+                Debug.Log("슬라이더 활성화 (Raise 금액 조정 중)");
+            }
+            else
+            {
+                // 2️⃣ 두 번째 클릭 → Raise 실행 & 패널 비활성화
+                isAdjustingRaise = false;
+                raisePanel.SetActive(false);
+
+                int chipAmount = Mathf.RoundToInt(raiseSlider.value);
+                Raise(chipAmount);
+
+                Debug.Log($"레이즈 실행! 금액: {chipAmount}");
+            }
         }
         else
         {
-            // 2️⃣ 두 번째 클릭 → Raise 실행 & 패널 비활성화
-            isAdjustingRaise = false;
-            raisePanel.SetActive(false);
-
-            int chipAmount = Mathf.RoundToInt(raiseSlider.value);
-            Raise(chipAmount);
-
-            Debug.Log($"레이즈 실행! 금액: {chipAmount}");
+            Debug.Log("아직 차례가 아닙니다!");
         }
     }
     private void SnapSliderValue()
@@ -89,46 +100,74 @@ public class Player : MonoBehaviour
     }
     public void Betting(int chip)       //베팅
     {
-
-        if (chip >= playerChip)
+        if (isMyTurn)
         {
-            Allin();
-            return;
-        }
-
-        if (playerChip> gm.BigBlind)
-        {
-            if (chip >= gm.BigBlind)
+            if (chip >= playerChip)
             {
-                gm.pots += chip;
-                gm.beforeBettingChip = chip;
-                playerChip -= chip;
-                isMyTurn = false;
+                Allin();
+                return;
             }
+
+            if (playerChip > gm.BigBlind)
+            {
+                if (chip >= gm.BigBlind)
+                {
+                    gm.pots += chip;
+                    gm.beforeBettingChip = chip;
+                    playerChip -= chip;
+                    isMyTurn = false;
+                }
+            }
+        }
+        else
+        {
+            Debug.Log("아직 차례가 아닙니다!");
         }
     }
     public void Call()                  //콜
     {
-        int toCall = gm.beforeBettingChip;
-        if (playerChip >= toCall)
+        if (isMyTurn)
         {
-            gm.pots += toCall;
-            playerChip -= toCall;
+            int toCall = gm.beforeBettingChip;
+            if (playerChip >= toCall)
+            {
+                gm.pots += toCall;
+                playerChip -= toCall;
+                isMyTurn = false;
+            }
+            else
+            {
+                Allin();
+            }
+        }
+        else
+        {
+            Debug.Log("아직 차례가 아닙니다!");
+        }
+        
+    }
+    public void Fold()                  //폴드
+    {
+        if (isMyTurn)
+        {
+            canPlay = false;
             isMyTurn = false;
         }
         else
         {
-            Allin();
+            Debug.Log("아직 차례가 아닙니다!");
         }
-    }
-    public void Fold()                  //폴드
-    {
-        canPlay = false;
-        isMyTurn = false;
     }
     public void Check()                 //체크
     {
-        isMyTurn = false;
+        if (isMyTurn)
+        {
+            isMyTurn = false;
+        }
+        else
+        {
+            Debug.Log("아직 차례가 아닙니다!");
+        }
     }
     public void Raise(int chip)                 //레이즈
     {
@@ -164,49 +203,56 @@ public class Player : MonoBehaviour
     }
     public void Allin()         //올인
     {
-        if (playerChip <= 0)
+        if (isMyTurn)
         {
-            Debug.LogWarning("올인 불가: 남은 칩이 없습니다.");
-            return;
-        }
-
-        int allinAmount = playerChip;        // 올인 금액
-        int toCall = gm.beforeBettingChip;   // 현재 콜해야 하는 금액
-
-        // 팟에 칩 추가
-        gm.pots += allinAmount;
-
-        // 칩 소모 및 턴 종료
-        playerChip = 0;
-        isMyTurn = false;
-
-        // 조건 1: 올인 칩이 콜 금액보다 적으면 => 단순 콜로 간주
-        if (allinAmount < toCall)
-        {
-            return;
-        }
-
-        // 조건 2: 올인 금액이 콜 금액보다 많으면 => 레이즈로 인정
-        if (allinAmount > toCall)
-        {
-            int raiseSize = allinAmount - toCall;  // 이번에 증가한 금액
-
-            // 첫 레이즈라면
-            if (gm.beforeRaiseChip == 0)
+            if (playerChip <= 0)
             {
-                gm.beforeRaiseChip = raiseSize;
-                gm.beforeBettingChip = allinAmount;
+                Debug.LogWarning("올인 불가: 남은 칩이 없습니다.");
+                return;
             }
-            else // 두 번째 이상 레이즈
+
+            int allinAmount = playerChip;        // 올인 금액
+            int toCall = gm.beforeBettingChip;   // 현재 콜해야 하는 금액
+
+            // 팟에 칩 추가
+            gm.pots += allinAmount;
+
+            // 칩 소모 및 턴 종료
+            playerChip = 0;
+            isMyTurn = false;
+
+            // 조건 1: 올인 칩이 콜 금액보다 적으면 => 단순 콜로 간주
+            if (allinAmount < toCall)
             {
-                gm.beforeRaiseChip = raiseSize;
-                gm.beforeBettingChip = allinAmount;
+                return;
+            }
+
+            // 조건 2: 올인 금액이 콜 금액보다 많으면 => 레이즈로 인정
+            if (allinAmount > toCall)
+            {
+                int raiseSize = allinAmount - toCall;  // 이번에 증가한 금액
+
+                // 첫 레이즈라면
+                if (gm.beforeRaiseChip == 0)
+                {
+                    gm.beforeRaiseChip = raiseSize;
+                    gm.beforeBettingChip = allinAmount;
+                }
+                else // 두 번째 이상 레이즈
+                {
+                    gm.beforeRaiseChip = raiseSize;
+                    gm.beforeBettingChip = allinAmount;
+                }
+            }
+            else
+            {
+                // 정확히 콜 금액 == 올인 금액일 때 → 단순 콜
+                return;
             }
         }
         else
         {
-            // 정확히 콜 금액 == 올인 금액일 때 → 단순 콜
-            return;
+            Debug.Log("아직 차례가 아닙니다!");
         }
     }
 }
