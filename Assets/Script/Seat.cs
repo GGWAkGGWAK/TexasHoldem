@@ -5,6 +5,11 @@ using UnityEngine;
 public class Seat : MonoBehaviour
 {
     public bool isSeated;
+
+    private void Awake()
+    {
+        RefreshIsSeated();
+    }
     void Start()
     {
         //isSeated = false;
@@ -34,5 +39,13 @@ public class Seat : MonoBehaviour
         isSeated = false;
     }
 
+    private void OnTransformChildrenChanged() // 플레이어가 붙거나 떨어질 때 자동 갱신
+    {
+        RefreshIsSeated();
+    }
+    private void RefreshIsSeated()
+    {
+        isSeated = GetComponentInChildren<Player>(true) != null;
+    }
 
 }

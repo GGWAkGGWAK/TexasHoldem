@@ -6,10 +6,12 @@ public class Deck : MonoBehaviour
 {
     public List<Seat> seats = new List<Seat>();
     public List<Card> deck = new List<Card>();      //ÇöÀç µ¦
+    
     [SerializeField]
     private List<Card> originalDeck = new List<Card>();     //±âº» µ¦
     [SerializeField]
     private List<Transform> boardCardsPositions = new List<Transform>();
+
     private void Awake()
     {
         boardCardsPositions.Add(GameObject.Find("Table").transform.GetChild(10).transform);
