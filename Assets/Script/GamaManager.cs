@@ -1,108 +1,194 @@
-using System.Collections;
+ï»¿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+public enum Street { Preflop, Flop, Turn, River, Showdown }
+public enum ActionType { Fold, Check, Call, Bet, Raise, AllIn }
+
 public class GamaManager : MonoBehaviour
 {
-    public int smallBlind;       //½º¸ôºí¶óÀÎµå
-    public int BigBlind;         //ºòºí¶óÀÎµå
-    public float duration;       //µà·¹ÀÌ¼Ç
-    public float bettingTime;    //º£ÆÃ Á¦ÇÑ ½Ã°£
-    public int pots;            //ÆÌ
-    public int beforeBettingChip;       //Á÷Àü º£ÆÃÄ¨
-    public int beforeRaiseChip;         //º£ÆÃÄ¨°ú ·¹ÀÌÁî Ä¨ÀÇ Â÷¾×
+    public int smallBlind;             // ìŠ¤ëª°ë¸”ë¼ì¸ë“œ
+    public int BigBlind;               // ë¹…ë¸”ë¼ì¸ë“œ
+    public float duration;             // ë“€ë ˆì´ì…˜
+    public float bettingTime;          // ë² íŒ… ì œí•œ ì‹œê°„
+    public int pots;                   // íŒŸ ê¸ˆì•¡
+    public int beforeBettingChip;      // ì§ì „ ë² íŒ… ê¸ˆì•¡
+    public int beforeRaiseChip;        // ë² íŒ…ì¹©ê³¼ ë ˆì´ì¦ˆì¹©ì˜ ì°¨ì•¡
 
-    public Text potsText;           //ÆÌ ÅØ½ºÆ®
+    public Text potsText;              // íŒŸ í‘œì‹œ UI
 
     public List<Player> turnOrder = new List<Player>();
     public int currentIndex = -1;
 
+    // í˜„ì¬ ìŠ¤íŠ¸ë¦¬íŠ¸
+    public Street currentStreet = Street.Preflop;
+
+
+    private int lastAggressorIndex = -1;  // ë§ˆì§€ë§‰ìœ¼ë¡œ ë ˆì´ì¦ˆí•œ í”Œë ˆì´ì–´ ì¸ë±ìŠ¤
+    private int actorsToAct = 0;          // ì´ë²ˆ ìŠ¤íŠ¸ë¦¬íŠ¸ì—ì„œ ë‚¨ì€ í”Œë ˆì´ì–´ ì•¡ì…˜ ìˆ˜
+
     private void Awake()
     {
         Transform canvas = GameObject.Find("Canvas").transform;
-        potsText = canvas.Find("ÆÌ").GetComponent<Text>();        
+        potsText = canvas.Find("íŒŸ").GetComponent<Text>();
     }
-    void Start()
+
+    private IEnumerator Start()
     {
         smallBlind = 10000;
         BigBlind = 20000;
         duration = 180;
-        beforeBettingChip = 20000;
+        beforeBettingChip = BigBlind;
+
+        yield return null; // ëª¨ë“  Awake/Start ì™„ë£Œ ë³´ì¥
+
         BuildTurnOrderBySeats();
-        SetFirstPlayer(0); // Ã¹ ÅÏ: 0¹ø ÇÃ·¹ÀÌ¾î
+
+        currentStreet = Street.Preflop;
+        StartBettingRound(0);
     }
+
     void Update()
     {
-        potsText.text = "Pots: " + pots.ToString();
+        potsText.text = "Pots: " + pots.ToString("N0");
     }
+
+    // ì¢Œì„ ê¸°ì¤€ìœ¼ë¡œ í„´ ìˆœì„œ êµ¬ì„±
     public void BuildTurnOrderBySeats()
     {
         turnOrder.Clear();
 
-        GameObject[] seatObjs = GameObject.FindGameObjectsWithTag("Seat");
-        if (seatObjs == null || seatObjs.Length == 0) return;
+        var seats = new List<Seat>(FindObjectsOfType<Seat>(true));
+        seats.Sort((a, b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
 
-        // Seat ÄÄÆ÷³ÍÆ® ¼öÁı
-        var seats = new List<Seat>();
-        foreach (var go in seatObjs)
-        {
-            var s = go.GetComponent<Seat>();
-            if (s != null) seats.Add(s);
-        }
-
-        // ¡Ú Áß¿ä: ÁÂ¼®À» "°èÃş(ÇüÁ¦) ¼ø¼­"·Î Á¤·Ä (¸ğµÎ °°Àº ºÎ¸ğ ¹Ø¿¡ ÀÖÀ» ¶§ ¾ÈÁ¤Àû)
-        seats.Sort((a, b) =>
-            a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex())
-        );
-
-        // (´ë¾È) ÀÌ¸§ ¼ıÀÚ ±âÁØ Á¤·ÄÀ» ¾²°í ½Í´Ù¸é:
-        // seats.Sort((a,b) => string.Compare(a.name, b.name, System.StringComparison.Ordinal));
-
-        // ÁÂ¼® ¼ø¼­´ë·Î Player¸¦ Ã£°í, Âø¼®/Âü¿© °¡´É Á¶°ÇÀ¸·Î ÇÊÅÍ
         foreach (var seat in seats)
         {
-            Player p = seat.GetComponentInChildren<Player>(true); // ºñÈ°¼º ÀÚ½Äµµ Å½»öÇÏ·Á¸é true
-            if (p != null && seat.isSeated && p.canPlay)
-            {
+            var p = seat.GetComponentInChildren<Player>(true);
+            seat.isSeated = (p != null);
+            if (p != null)
                 turnOrder.Add(p);
-            }
         }
 
-        // ¸ğµÎ ÅÏ false·Î ÃÊ±âÈ­
-        foreach (var p in turnOrder) p.isMyTurn = false;
+        foreach (var p in turnOrder)
+            p.isMyTurn = false;
 
-        // ¾ÈÀü ·Î±×
-        Debug.Log($"[TurnOrder] ÁÂ¼® ±âÁØ ÇÃ·¹ÀÌ¾î ¼ö: {turnOrder.Count}");
+        Debug.Log($"[TurnOrder] ìˆ˜ì§‘ëœ í”Œë ˆì´ì–´ ìˆ˜: {turnOrder.Count}");
     }
 
-    public void SetFirstPlayer(int index)
+    public int ActivePlayersCount()
     {
-        if (turnOrder.Count == 0)
+        int cnt = 0;
+        foreach (var p in turnOrder)
+            if (p != null && p.canPlay && p.playerChip > 0)
+                cnt++;
+        return cnt;
+    }
+
+    // ìƒˆë¡œìš´ ë² íŒ… ë¼ìš´ë“œ ì‹œì‘
+    public void StartBettingRound(int firstIndexToAct)
+    {
+        if (currentStreet != Street.Preflop)
         {
-            currentIndex = -1;
+            beforeBettingChip = 0;
+            beforeRaiseChip = 0;
+        }
+
+        foreach (var p in turnOrder)
+            if (p != null) p.isMyTurn = false;
+
+        currentIndex = Mathf.Clamp(firstIndexToAct, 0, turnOrder.Count - 1);
+        turnOrder[currentIndex].isMyTurn = true;
+
+        // ìƒˆ ë¼ìš´ë“œ ì‹œì‘
+        lastAggressorIndex = -1;
+        actorsToAct = ActivePlayersCount();
+
+        Debug.Log($"[RoundStart] {currentStreet}, first={turnOrder[currentIndex].name}, actorsToAct={actorsToAct}");
+    }
+
+    // í”Œë ˆì´ì–´ ì•¡ì…˜ ì²˜ë¦¬ (ì½œ, í´ë“œ, ë ˆì´ì¦ˆ ë“±)
+    public void RegisterAction(Player actor, ActionType action, bool isRaise)
+    {
+        if (action == ActionType.Fold)
+        {
+            // í´ë“œ ì‹œ ì•¡ì…˜ ìˆ˜ ê°ì†Œ
+            actorsToAct = Mathf.Max(actorsToAct - 1, 0);
+            Debug.Log($"[Action] {actor.name} FOLD â†’ actorsToAct={actorsToAct}");
+        }
+        else if (isRaise)
+        {
+            // ë ˆì´ì¦ˆ ë°œìƒ ì‹œ ë‹¤ì‹œ í•œ ë°”í€´ ëŒì•„ì•¼ í•¨
+            lastAggressorIndex = turnOrder.IndexOf(actor);
+            actorsToAct = ActivePlayersCount() - 1;
+
+            Debug.Log($"[Action] {actor.name} RAISE â†’ lastAggressorIndex={lastAggressorIndex}, actorsToAct reset={actorsToAct}");
+        }
+        else
+        {
+            // ì¼ë°˜ ì•¡ì…˜ (Call, Check ë“±)
+            actorsToAct = Mathf.Max(actorsToAct - 1, 0);
+            Debug.Log($"[Action] {actor.name} {action} â†’ actorsToAct={actorsToAct}");
+        }
+
+        // ë‚¨ì€ í”Œë ˆì´ì–´ê°€ í•œ ëª…ì´ë¼ë©´ í•¸ë“œ ì¢…ë£Œ
+        if (ActivePlayersCount() <= 1)
+        {
+            Debug.Log("[Hand] ë‚¨ì€ í”Œë ˆì´ì–´ 1ëª… â†’ í•¸ë“œ ì¢…ë£Œ(ì •ì‚° í•„ìš”)");
             return;
         }
 
-        foreach (var p in turnOrder) p.isMyTurn = false;
-
-        currentIndex = Mathf.Clamp(index, 0, turnOrder.Count - 1);
-        turnOrder[currentIndex].isMyTurn = true;
-
-        Debug.Log($"Ã¹ ÅÏ: {turnOrder[currentIndex].name}");
+        // ëª¨ë“  ì•¡ì…˜ì´ ëë‚¬ë‹¤ë©´ ë‹¤ìŒ ìŠ¤íŠ¸ë¦¬íŠ¸ë¡œ ì´ë™
+        if (actorsToAct == 0)
+        {
+            AdvanceStreet();
+        }
     }
 
-    // --- ¾×ÅÍ ÀÌÈÄÀÇ ´ÙÀ½ À¯È¿ ÇÃ·¹ÀÌ¾î¿¡°Ô ÅÏ ³Ñ±â±â ---
+    // ë‹¤ìŒ ìŠ¤íŠ¸ë¦¬íŠ¸ ì§„í–‰
+    public void AdvanceStreet()
+    {
+        var deck = FindObjectOfType<Deck>();
+
+        switch (currentStreet)
+        {
+            case Street.Preflop:
+                currentStreet = Street.Flop;
+                deck.Plop();
+                StartBettingRound(0);
+                Debug.Log("[Street] â†’ FLOP ì‹œì‘");
+                break;
+
+            case Street.Flop:
+                currentStreet = Street.Turn;
+                deck.Turn();
+                StartBettingRound(0);
+                Debug.Log("[Street] â†’ TURN ì‹œì‘");
+                break;
+
+            case Street.Turn:
+                currentStreet = Street.River;
+                deck.River();
+                StartBettingRound(0);
+                Debug.Log("[Street] â†’ RIVER ì‹œì‘");
+                break;
+
+            case Street.River:
+                currentStreet = Street.Showdown;
+                Debug.Log("[Street] â†’ SHOWDOWN (ìŠ¹ì íŒì •)");
+                break;
+        }
+    }
+
+    // ë‹¤ìŒ í„´ìœ¼ë¡œ ë„˜ê¸°ê¸°
     public void NextTurnFrom(Player actor)
     {
         if (turnOrder.Count == 0) return;
 
         int idx = turnOrder.IndexOf(actor);
         if (idx < 0) idx = currentIndex;
-
         actor.isMyTurn = false;
 
-        // ´ÙÀ½ À¯È¿ ÈÄº¸ Å½»ö: canPlay=true, Ä¨>0
         for (int step = 1; step <= turnOrder.Count; step++)
         {
             int next = (idx + step) % turnOrder.Count;
@@ -112,12 +198,56 @@ public class GamaManager : MonoBehaviour
             {
                 currentIndex = next;
                 cand.isMyTurn = true;
-                Debug.Log($"´ÙÀ½ ÅÏ: {cand.name}");
+                Debug.Log($"[NextTurn] â†’ {cand.name}");
                 return;
             }
         }
 
-        // À¯È¿ÇÑ ´ÙÀ½ ÁÖÀÚ°¡ ¾ø´Ù¸é: ¶ó¿îµå Á¾·á Ã³¸® Æ÷ÀÎÆ®
-        Debug.Log("À¯È¿ÇÑ ´ÙÀ½ ÇÃ·¹ÀÌ¾î ¾øÀ½ ¡æ ½ºÆ®¸®Æ®/¶ó¿îµå Á¾·á Ã³¸® ÇÊ¿ä");
+        Debug.Log("[NextTurn] ìœ íš¨ í”Œë ˆì´ì–´ ì—†ìŒ");
+    }
+
+    // í´ë“œ ì²˜ë¦¬ í›„ í„´ ì´ë™ + ë¦¬ìŠ¤íŠ¸ ì œê±°
+    public void HandleFoldAndPassTurn(Player actor)
+    {
+        if (turnOrder.Count == 0) return;
+
+        int removedIndex = turnOrder.IndexOf(actor);
+        if (removedIndex < 0) removedIndex = currentIndex;
+
+        actor.isMyTurn = false;
+
+        // ì–´ê·¸ë ˆì„œê°€ ì ‘ì—ˆëŠ”ì§€ í™•ì¸ í›„ ë³´ì •
+        if (lastAggressorIndex >= 0)
+        {
+            if (removedIndex < lastAggressorIndex) lastAggressorIndex--;
+            else if (removedIndex == lastAggressorIndex) lastAggressorIndex = -1;
+        }
+
+        turnOrder.RemoveAt(removedIndex);
+
+        if (turnOrder.Count == 0)
+        {
+            Debug.Log("[Fold] ëª¨ë“  í”Œë ˆì´ì–´ ì œê±°ë¨ â†’ í•¸ë“œ ì¢…ë£Œ(ì •ì‚° í•„ìš”)");
+            return;
+        }
+
+        currentIndex = removedIndex % turnOrder.Count;
+
+        for (int step = 0; step < turnOrder.Count; step++)
+        {
+            int next = (currentIndex + step) % turnOrder.Count;
+            var cand = turnOrder[next];
+
+            if (cand != null && cand.canPlay && cand.playerChip > 0)
+            {
+                foreach (var p in turnOrder) if (p != null) p.isMyTurn = false;
+                currentIndex = next;
+                cand.isMyTurn = true;
+                Debug.Log($"[Foldâ†’NextTurn] {cand.name}");
+                return;
+            }
+        }
+
+        Debug.Log("[Fold] ìœ íš¨ í”Œë ˆì´ì–´ ì—†ìŒ â†’ í•¸ë“œ ì¢…ë£Œ(ì •ì‚° í•„ìš”)");
     }
 }

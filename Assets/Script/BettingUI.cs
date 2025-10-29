@@ -41,7 +41,7 @@ public class BettingUI : MonoBehaviour
     {
         var p = CurrentPlayer();
         if (p == null || !p.isMyTurn) return;   // °¡µå
-        p.Call();
+        p.Fold();
     }
 
     public void OnClickCheck()
