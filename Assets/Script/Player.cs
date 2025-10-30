@@ -9,6 +9,8 @@ public class Player : MonoBehaviour
     public bool canPlay;
     public bool isMyTurn;
 
+    public bool isAllIn;
+
     private bool isAdjustingRaise = false;
     private int raiseStep = 10000;
 
@@ -30,14 +32,14 @@ public class Player : MonoBehaviour
 
         raisePanel.SetActive(false);
 
+        playerChip = 3000000;
         canPlay = true;
         isMyTurn = false;
+        isAllIn = false;
     }
 
     void Start()
     {
-        playerChip = 3000000;
-
         raiseSlider.onValueChanged.AddListener(_ => SnapSliderValue());
     }
 
@@ -88,16 +90,14 @@ public class Player : MonoBehaviour
     {
         if (!isMyTurn) return;
 
-        if (chip >= playerChip)
-        {
-            Allin();
-            return;
-        }
+        if (chip >= playerChip) { Allin(); return; }
 
+        int currentToCall = gm.beforeBettingChip; // 보통 0인 스트리트에서 오픈
         if (playerChip > gm.BigBlind && chip >= gm.BigBlind)
         {
             gm.pots += chip;
             gm.beforeBettingChip = chip;
+            gm.beforeRaiseChip = chip - currentToCall; // ✅ 첫 오픈은 레이즈 크기 정의
             playerChip -= chip;
             isMyTurn = false;
 
@@ -107,7 +107,6 @@ public class Player : MonoBehaviour
             gm.RegisterAction(this, ActionType.Bet, false);
             gm.NextTurnFrom(this);
         }
-
     }
 
     public void Call()
@@ -216,6 +215,7 @@ public class Player : MonoBehaviour
         gm.pots += allinAmount;
         playerChip = 0;
         isMyTurn = false;
+        isAllIn = true;
 
         bool isRaise = allinAmount > toCall;
         if (isRaise)

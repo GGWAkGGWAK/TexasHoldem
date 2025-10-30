@@ -27,6 +27,8 @@ public class GamaManager : MonoBehaviour
 
     private int lastAggressorIndex = -1;  // 마지막으로 레이즈한 플레이어 인덱스
     private int actorsToAct = 0;          // 이번 스트리트에서 남은 플레이어 액션 수
+    private bool waitingForRoundEnd = false;
+
 
     private void Awake()
     {
@@ -41,7 +43,7 @@ public class GamaManager : MonoBehaviour
         duration = 180;
         beforeBettingChip = BigBlind;
 
-        yield return null; // 모든 Awake/Start 완료 보장
+        yield return null;
 
         BuildTurnOrderBySeats();
 
@@ -80,7 +82,7 @@ public class GamaManager : MonoBehaviour
     {
         int cnt = 0;
         foreach (var p in turnOrder)
-            if (p != null && p.canPlay && p.playerChip > 0)
+            if (p != null && p.canPlay && !p.isAllIn) // 칩보다는 올인 여부로 판정
                 cnt++;
         return cnt;
     }
@@ -156,26 +158,23 @@ public class GamaManager : MonoBehaviour
                 currentStreet = Street.Flop;
                 deck.Plop();
                 StartBettingRound(0);
-                Debug.Log("[Street] → FLOP 시작");
                 break;
 
             case Street.Flop:
                 currentStreet = Street.Turn;
                 deck.Turn();
                 StartBettingRound(0);
-                Debug.Log("[Street] → TURN 시작");
                 break;
 
             case Street.Turn:
                 currentStreet = Street.River;
                 deck.River();
                 StartBettingRound(0);
-                Debug.Log("[Street] → RIVER 시작");
                 break;
 
             case Street.River:
                 currentStreet = Street.Showdown;
-                Debug.Log("[Street] → SHOWDOWN (승자 판정)");
+                ResolveShowdown();
                 break;
         }
     }
@@ -250,4 +249,24 @@ public class GamaManager : MonoBehaviour
 
         Debug.Log("[Fold] 유효 플레이어 없음 → 핸드 종료(정산 필요)");
     }
+    private void ResolveShowdown()
+{
+    var deck = FindObjectOfType<Deck>();
+    List<CardData> board5 = deck.GetBoardCardData();
+
+    // 현재 참여 중인 플레이어만 수집 (너의 turnOrder 쓰면 더 정확)
+    var activePlayers = new List<Player>();
+    foreach (var p in turnOrder)
+        if (p != null && p.canPlay) activePlayers.Add(p);
+
+    // 공동 우승자 판정
+    var winners = WinnerEvaluator.DecideWinners(activePlayers, board5);
+
+    // 팟 분배
+    WinnerEvaluator.DistributePot(pots, winners);
+    pots = 0;
+
+    // TODO: 우승자 하이라이트/토스트, 다음 핸드 초기화, 버튼 상태 리셋 등
+    Debug.Log($"Showdown 완료. Winners: {winners.Count}");
+}
 }

@@ -1,14 +1,14 @@
-using System.Collections;
+ï»¿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class Deck : MonoBehaviour
 {
     public List<Seat> seats = new List<Seat>();
-    public List<Card> deck = new List<Card>();      //ÇöÀç µ¦
+    public List<Card> deck = new List<Card>();      //í˜„ì¬ ë±
     
     [SerializeField]
-    private List<Card> originalDeck = new List<Card>();     //±âº» µ¦
+    private List<Card> originalDeck = new List<Card>();     //ê¸°ë³¸ ë±
     [SerializeField]
     private List<Transform> boardCardsPositions = new List<Transform>();
 
@@ -25,21 +25,21 @@ public class Deck : MonoBehaviour
         InitializeDeck();
         ShuffleDeck();
     }
-    public void InitializeDeck()      //µ¦ ÃÊ±âÈ­ ¹× »ı¼º
+    public void InitializeDeck()      //ë± ì´ˆê¸°í™” ë° ìƒì„±
     {
         deck.Clear();
         deck.AddRange(originalDeck);
-        Debug.Log("µ¦ »ı¼º");
+        Debug.Log("ë± ìƒì„±");
     }
 
-    public void ShuffleDeck()       //µ¦ ¼ÅÇÃ
+    public void ShuffleDeck()       //ë± ì…”í”Œ
     {
-        InitializeDeck();       //µ¦ ÃÊ±âÈ­
+        InitializeDeck();       //ë± ì´ˆê¸°í™”
 
-        Card[] allCardsInScene = FindObjectsOfType<Card>();     //¾À ³» ¸ğµç Ä«µå
+        Card[] allCardsInScene = FindObjectsOfType<Card>();     //ì”¬ ë‚´ ëª¨ë“  ì¹´ë“œ
         for(int i =0; i< allCardsInScene.Length; i++)
         {
-            Destroy(allCardsInScene[i].gameObject);             //¾À ³» ¸ğµç Ä«µå »èÁ¦
+            Destroy(allCardsInScene[i].gameObject);             //ì”¬ ë‚´ ëª¨ë“  ì¹´ë“œ ì‚­ì œ
         }
 
 
@@ -50,65 +50,82 @@ public class Deck : MonoBehaviour
             deck[i] = deck[randIndex];
             deck[randIndex] = temp;
         }
-        Debug.Log("µ¦ ¼ÅÇÃ ¿Ï·á");
+        Debug.Log("ë± ì…”í”Œ ì™„ë£Œ");
     }
 
-    public void Preplop()       //ÇÁ¸®ÇÃ¶ø
+    public void Preplop()       // í”„ë¦¬í”Œë
     {
-        deck.RemoveAt(0);   //Ä«µåÇÑÀå ¹ø
+        // ë²ˆ ì¹´ë“œ í•œ ì¥
+        if (deck.Count > 0)
+            deck.RemoveAt(0);
 
+        // ì¢Œì„ ë¦¬ìŠ¤íŠ¸ ì´ˆê¸°í™”
         seats.Clear();
 
+        // ëª¨ë“  ì¢Œì„ íƒìƒ‰
         GameObject[] allSeats = GameObject.FindGameObjectsWithTag("Seat");
 
-        for(int i = 0; i< allSeats.Length; i++)
+        for (int i = 0; i < allSeats.Length; i++)
         {
             GameObject seatObj = allSeats[i];
             Seat seat = seatObj.GetComponent<Seat>();
 
-            if(seat!=null && seat.isSeated)
+            if (seat != null && seat.isSeated)
             {
                 seats.Add(seat);
             }
             else
             {
-                Debug.Log("Âø¼®ÁßÀÎ ÇÃ·¹ÀÌ¾î X");
+                Debug.Log($"[Preflop] ì°©ì„ì¤‘ì¸ í”Œë ˆì´ì–´ X ({seatObj.name})");
             }
         }
-        Debug.Log($"ÇöÀç Âø¼®ÁßÀÎ ÁÂ¼® ¼ö: {seats.Count}");
-        if (deck.Count > 0)
+
+        Debug.Log($"[Preflop] í˜„ì¬ ì°©ì„ì¤‘ì¸ ì¢Œì„ ìˆ˜: {seats.Count}");
+
+        if (deck.Count <= 0)
         {
-            float cardOffset = 0.9f; //Ä«µå°£ °£°İ
+            Debug.LogWarning("[Preflop] ë±ì— ì¹´ë“œê°€ ì—†ìŠµë‹ˆë‹¤.");
+            return;
+        }
 
-            for (int i = 0; i < seats.Count; i++)           //°¢ ÇÃ·¹ÀÌ¾îÀÇ Ã¹¹øÂ° Ä«µå
+        float cardOffset = 0.9f; // ì¹´ë“œ ê°„ê²©
+
+        // ê° ì¢Œì„ì— 2ì¥ì”© ë°°ë¶„
+        for (int i = 0; i < seats.Count; i++)
+        {
+            Seat seat = seats[i];
+            if (seat == null) continue;
+
+            // í”Œë ˆì´ì–´ ì˜¤ë¸Œì íŠ¸ íƒìƒ‰ (ìì‹ìœ¼ë¡œ ìˆë‹¤ê³  ê°€ì •)
+            Player player = seat.GetComponentInChildren<Player>(true);
+            Transform parent = (player != null) ? player.transform : seat.transform;
+
+            // 1ï¸âƒ£ ì²« ë²ˆì§¸ ì¹´ë“œ
+            if (deck.Count > 0)
             {
-                Card newCard = Instantiate(deck[0], seats[i].transform.position, Quaternion.identity);
-                newCard.transform.SetParent(seats[i].transform);
-
+                Card newCard = Instantiate(deck[0], seat.transform.position, Quaternion.identity);
+                newCard.transform.SetParent(parent, worldPositionStays: true);
                 deck.RemoveAt(0);
             }
 
-            for (int i = 0; i < seats.Count; i++)           //°¢ ÇÃ·¹ÀÌ¾îÀÇ µÎ¹øÂ° Ä«µå
+            // 2ï¸âƒ£ ë‘ ë²ˆì§¸ ì¹´ë“œ
+            if (deck.Count > 0)
             {
                 Vector3 rightOffset = new Vector3(cardOffset, 0, 0);
-                Vector3 spawnPos = seats[i].transform.position + rightOffset;
+                Vector3 spawnPos = seat.transform.position + rightOffset;
 
                 Card newCard = Instantiate(deck[0], spawnPos, Quaternion.identity);
-                newCard.transform.SetParent(seats[i].transform);
-
+                newCard.transform.SetParent(parent, worldPositionStays: true);
                 deck.RemoveAt(0);
             }
         }
-        else
-        {
-            Debug.Log("µ¦¿¡ Ä«µå°¡ ¾ø½À´Ï´Ù.");
-        }
-        
-        
+
+        Debug.Log("[Preflop] ì¹´ë“œ ë°°ë¶„ ì™„ë£Œ (Player ìì‹ìœ¼ë¡œ ë¶€ì°©)");
     }
-    public void Plop()          //ÇÃ¶ø
+
+    public void Plop()          //í”Œë
     {
-        deck.RemoveAt(0);       //Ä«µå ÇÑÀå ¹ø
+        deck.RemoveAt(0);       //ì¹´ë“œ í•œì¥ ë²ˆ
         if (deck.Count > 0)
         {
             for(int i=0; i<3; i++)
@@ -121,12 +138,12 @@ public class Deck : MonoBehaviour
         }
         else
         {
-            Debug.Log("µ¦¿¡ Ä«µå°¡ ¾ø½À´Ï´Ù.");
+            Debug.Log("ë±ì— ì¹´ë“œê°€ ì—†ìŠµë‹ˆë‹¤.");
         }
     }
-    public void Turn()          //ÅÏ
+    public void Turn()          //í„´
     {
-        deck.RemoveAt(0);       //Ä«µå ÇÑÀå ¹ø
+        deck.RemoveAt(0);       //ì¹´ë“œ í•œì¥ ë²ˆ
         if (deck.Count > 0)
         {
             Card newCard = Instantiate(deck[0], boardCardsPositions[3].position, Quaternion.identity);
@@ -135,13 +152,13 @@ public class Deck : MonoBehaviour
         }
         else
         {
-            Debug.Log("µ¦¿¡ Ä«µå°¡ ¾ø½À´Ï´Ù.");
+            Debug.Log("ë±ì— ì¹´ë“œê°€ ì—†ìŠµë‹ˆë‹¤.");
         }
 
     }
-    public void River()         //¸®¹ö
+    public void River()         //ë¦¬ë²„
     {
-        deck.RemoveAt(0);       //Ä«µå ÇÑÀå ¹ø
+        deck.RemoveAt(0);       //ì¹´ë“œ í•œì¥ ë²ˆ
         if (deck.Count > 0)
         {
             Card newCard = Instantiate(deck[0], boardCardsPositions[4].position, Quaternion.identity);
@@ -150,7 +167,17 @@ public class Deck : MonoBehaviour
         }
         else
         {
-            Debug.Log("µ¦¿¡ Ä«µå°¡ ¾ø½À´Ï´Ù.");
+            Debug.Log("ë±ì— ì¹´ë“œê°€ ì—†ìŠµë‹ˆë‹¤.");
         }
+    }
+    public List<CardData> GetBoardCardData()
+    {
+        var result = new List<CardData>();
+        foreach (var t in boardCardsPositions) // ë„ˆê°€ ì´ë¯¸ ê°–ê³ ìˆëŠ” Transform ë¦¬ìŠ¤íŠ¸
+        {
+            var c = t.GetComponentInChildren<Card>();
+            if (c != null) result.Add(c.cardData);
+        }
+        return result;
     }
 }
