@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-
 public static class WinnerEvaluator
 {
     // 공동 우승자(스플릿 포함) 반환

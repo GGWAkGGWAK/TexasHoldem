@@ -10,6 +10,7 @@ public class Player : MonoBehaviour
     public bool isMyTurn;
 
     public bool isAllIn;
+    public int contributedThisHand;
 
     private bool isAdjustingRaise = false;
     private int raiseStep = 10000;
@@ -99,6 +100,7 @@ public class Player : MonoBehaviour
             gm.beforeBettingChip = chip;
             gm.beforeRaiseChip = chip - currentToCall; // ✅ 첫 오픈은 레이즈 크기 정의
             playerChip -= chip;
+            contributedThisHand += chip;
             isMyTurn = false;
 
             if (raisePanel != null && raisePanel.activeSelf)
@@ -119,6 +121,7 @@ public class Player : MonoBehaviour
         {
             gm.pots += toCall;
             playerChip -= toCall;
+            contributedThisHand += toCall;
             isMyTurn = false;
 
             gm.RegisterAction(this, ActionType.Call, false);
@@ -190,6 +193,7 @@ public class Player : MonoBehaviour
             gm.pots += chip;
             gm.beforeBettingChip = chip;
             playerChip -= chip;
+            contributedThisHand += chip;
             isMyTurn = false;
 
             if (raisePanel != null && raisePanel.activeSelf)
@@ -214,6 +218,7 @@ public class Player : MonoBehaviour
 
         gm.pots += allinAmount;
         playerChip = 0;
+        contributedThisHand += allinAmount;
         isMyTurn = false;
         isAllIn = true;
 

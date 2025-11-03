@@ -17,6 +17,7 @@ public class GamaManager : MonoBehaviour
     public int beforeRaiseChip;        // 베팅칩과 레이즈칩의 차액
 
     public Text potsText;              // 팟 표시 UI
+    public Text winnerText;
 
     public List<Player> turnOrder = new List<Player>();
     public int currentIndex = -1;
@@ -34,6 +35,8 @@ public class GamaManager : MonoBehaviour
     {
         Transform canvas = GameObject.Find("Canvas").transform;
         potsText = canvas.Find("팟").GetComponent<Text>();
+        winnerText = canvas.Find("승자표시").GetComponent<Text>();
+        winnerText.text = "";
     }
 
     private IEnumerator Start()
@@ -105,47 +108,53 @@ public class GamaManager : MonoBehaviour
         // 새 라운드 시작
         lastAggressorIndex = -1;
         actorsToAct = ActivePlayersCount();
-
+        if (winnerText != null)
+            winnerText.text = "";
         Debug.Log($"[RoundStart] {currentStreet}, first={turnOrder[currentIndex].name}, actorsToAct={actorsToAct}");
     }
 
     // 플레이어 액션 처리 (콜, 폴드, 레이즈 등)
     public void RegisterAction(Player actor, ActionType action, bool isRaise)
     {
+        // 액션에 따른 라운드 진행 카운트 업데이트
         if (action == ActionType.Fold)
         {
-            // 폴드 시 액션 수 감소
+            // 폴드는 해당 플레이어가 이번 라운드 더 이상 액션하지 않으므로 감소
             actorsToAct = Mathf.Max(actorsToAct - 1, 0);
             Debug.Log($"[Action] {actor.name} FOLD → actorsToAct={actorsToAct}");
         }
         else if (isRaise)
         {
-            // 레이즈 발생 시 다시 한 바퀴 돌아야 함
+            // 레이즈가 발생하면 마지막 어그레서 갱신 + 한 바퀴 더
             lastAggressorIndex = turnOrder.IndexOf(actor);
-            actorsToAct = ActivePlayersCount() - 1;
-
+            actorsToAct = ActivePlayersCount() - 1; // 레이저 제외 나머지 모두 액션 필요
             Debug.Log($"[Action] {actor.name} RAISE → lastAggressorIndex={lastAggressorIndex}, actorsToAct reset={actorsToAct}");
         }
         else
         {
-            // 일반 액션 (Call, Check 등)
+            // 일반 액션(Call/Check/Bet 등)
             actorsToAct = Mathf.Max(actorsToAct - 1, 0);
             Debug.Log($"[Action] {actor.name} {action} → actorsToAct={actorsToAct}");
         }
 
-        // 남은 플레이어가 한 명이라면 핸드 종료
-        if (ActivePlayersCount() <= 1)
+        // 올 폴드 감지: 폴드하지 않은(=canPlay==true) 플레이어가 1명 이하인지 확인
+        int alive = 0;
+        foreach (var p in turnOrder)
+            if (p != null && p.canPlay) alive++;
+
+        if (alive <= 1)
         {
-            Debug.Log("[Hand] 남은 플레이어 1명 → 핸드 종료(정산 필요)");
+            WinByAllFold();   // → 즉시 승자 지급/표시, 핸드 종료 처리
             return;
         }
 
-        // 모든 액션이 끝났다면 다음 스트리트로 이동
+        // 이번 스트리트에서 모두 액션을 마쳤으면 다음 스트리트로
         if (actorsToAct == 0)
         {
             AdvanceStreet();
         }
     }
+
 
     // 다음 스트리트 진행
     public void AdvanceStreet()
@@ -213,23 +222,38 @@ public class GamaManager : MonoBehaviour
         int removedIndex = turnOrder.IndexOf(actor);
         if (removedIndex < 0) removedIndex = currentIndex;
 
+        // 현재 턴 해제
         actor.isMyTurn = false;
 
-        // 어그레서가 접었는지 확인 후 보정
+        // 마지막 어그레서 인덱스 보정
         if (lastAggressorIndex >= 0)
         {
             if (removedIndex < lastAggressorIndex) lastAggressorIndex--;
             else if (removedIndex == lastAggressorIndex) lastAggressorIndex = -1;
         }
 
+        // 턴오더에서 제거
         turnOrder.RemoveAt(removedIndex);
 
+        // 남은 인원이 없으면 종료
         if (turnOrder.Count == 0)
         {
             Debug.Log("[Fold] 모든 플레이어 제거됨 → 핸드 종료(정산 필요)");
             return;
         }
 
+        // ✅ 올 폴드 감지: 폴드하지 않은(=canPlay==true) 플레이어가 1명 이하인지 확인
+        int alive = 0;
+        foreach (var p in turnOrder)
+            if (p != null && p.canPlay) alive++;
+
+        if (alive <= 1)
+        {
+            WinByAllFold();   // → 즉시 승자 지급/표시, 핸드 종료 처리
+            return;
+        }
+
+        // 다음 턴 후보 계산 (제거 위치 기준으로 순회)
         currentIndex = removedIndex % turnOrder.Count;
 
         for (int step = 0; step < turnOrder.Count; step++)
@@ -237,36 +261,105 @@ public class GamaManager : MonoBehaviour
             int next = (currentIndex + step) % turnOrder.Count;
             var cand = turnOrder[next];
 
+            // 다음 턴으로 넘길 유효 후보: 폴드 안 했고 칩 > 0 (올인은 액션 제외)
             if (cand != null && cand.canPlay && cand.playerChip > 0)
             {
-                foreach (var p in turnOrder) if (p != null) p.isMyTurn = false;
+                // 모든 플레이어 턴 플래그 초기화
+                foreach (var p in turnOrder)
+                    if (p != null) p.isMyTurn = false;
+
                 currentIndex = next;
                 cand.isMyTurn = true;
+
                 Debug.Log($"[Fold→NextTurn] {cand.name}");
                 return;
             }
         }
 
-        Debug.Log("[Fold] 유효 플레이어 없음 → 핸드 종료(정산 필요)");
+        // 유효 후보를 못 찾으면(모두 올인 등) → 다음 스트리트로 진행될 수 있음
+        Debug.Log("[Fold] 유효 플레이어 없음 → 다음 진행 판단 필요");
     }
+
     private void ResolveShowdown()
-{
-    var deck = FindObjectOfType<Deck>();
-    List<CardData> board5 = deck.GetBoardCardData();
+    {
+        var deck = FindObjectOfType<Deck>();
+        List<CardData> board5 = deck.GetBoardCardData();
 
-    // 현재 참여 중인 플레이어만 수집 (너의 turnOrder 쓰면 더 정확)
-    var activePlayers = new List<Player>();
-    foreach (var p in turnOrder)
-        if (p != null && p.canPlay) activePlayers.Add(p);
+        var activePlayers = new List<Player>();
+        foreach (var p in turnOrder)
+            if (p != null && p.canPlay) activePlayers.Add(p);
 
-    // 공동 우승자 판정
-    var winners = WinnerEvaluator.DecideWinners(activePlayers, board5);
+        // 메인 승자(공동우승 포함)
+        var winners = WinnerEvaluator.DecideWinners(activePlayers, board5);
 
-    // 팟 분배
-    WinnerEvaluator.DistributePot(pots, winners);
-    pots = 0;
+        // ✅ 화면 표시용 문자열 만들기 (족보까지)
+        if (winnerText != null)
+        {
+            if (winners.Count == 0)
+            {
+                winnerText.text = "Winner: -";
+            }
+            else
+            {
+                var parts = new List<string>();
+                foreach (var w in winners)
+                {
+                    // w의 홀카드로 족보 재평가(표시용)
+                    var hole = w.GetComponentsInChildren<Card>(true);
+                    var holeData = new List<CardData>();
+                    foreach (var c in hole) holeData.Add(c.cardData);
 
-    // TODO: 우승자 하이라이트/토스트, 다음 핸드 초기화, 버튼 상태 리셋 등
-    Debug.Log($"Showdown 완료. Winners: {winners.Count}");
-}
+                    var hv = HandEvaluator.EvaluateBestFromHoleAndBoard(holeData, board5);
+                    parts.Add($"{w.name} ({hv.Category})");
+                }
+                winnerText.text = (winners.Count == 1)
+                    ? $"Winner: {parts[0]}"
+                    : $"Winners (Split): {string.Join(", ", parts)}";
+            }
+        }
+
+        // 실제 분배(사이드팟 포함) – 이미 구현한 사이드팟 로직 사용 시:
+        var allPlayers = new List<Player>(turnOrder);
+        var potsList = SidePot.BuildPots(allPlayers);
+        SidePot.DistributeAllPots(potsList, board5);
+
+        pots = 0;
+        foreach (var p in allPlayers) { if (p == null) continue; p.contributedThisHand = 0; p.isAllIn = false; }
+
+        Debug.Log($"Showdown 완료. Winners: {winners.Count}");
+    }
+    // GamaManager.cs
+    private void WinByAllFold()
+    {
+        // 폴드하지 않은 플레이어(=canPlay == true)만 찾기
+        var alive = new List<Player>();
+        foreach (var p in turnOrder)
+            if (p != null && p.canPlay) alive.Add(p);
+
+        if (alive.Count != 1) return; // 안전장치
+
+        var winner = alive[0];
+
+        // 팟 지급
+        winner.playerChip += pots;
+        int paid = pots;
+        pots = 0;
+
+        // UI 표시
+        if (winnerText != null)
+            winnerText.text = $"Winner: {winner.name} (+{paid:N0})";
+
+        // 다음 핸드 초기화 준비 (원하면 여기서 셔플/리셋 호출)
+        foreach (var p in turnOrder)
+        {
+            if (p == null) continue;
+            p.contributedThisHand = 0;
+            p.isAllIn = false;
+            p.isMyTurn = false;
+        }
+
+        Debug.Log($"[AllFold] {winner.name} 승리. {paid:N0} 수령");
+    }
+
+
 }
