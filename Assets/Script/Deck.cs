@@ -5,175 +5,142 @@ using UnityEngine;
 public class Deck : MonoBehaviour
 {
     public List<Seat> seats = new List<Seat>();
-    public List<Card> deck = new List<Card>();      //현재 덱
-    
-    [SerializeField]
-    private List<Card> originalDeck = new List<Card>();     //기본 덱
-    [SerializeField]
-    private List<Transform> boardCardsPositions = new List<Transform>();
+    public List<Card> deck = new List<Card>(); // 현재 덱
+
+    [SerializeField] private List<Card> originalDeck = new List<Card>(); // 기본 52장(프리팹/프리셋)
+    [SerializeField] private List<Transform> boardCardsPositions = new List<Transform>();
 
     private void Awake()
     {
-        boardCardsPositions.Add(GameObject.Find("Table").transform.GetChild(10).transform);
-        boardCardsPositions.Add(GameObject.Find("Table").transform.GetChild(11).transform);
-        boardCardsPositions.Add(GameObject.Find("Table").transform.GetChild(12).transform);
-        boardCardsPositions.Add(GameObject.Find("Table").transform.GetChild(13).transform);
-        boardCardsPositions.Add(GameObject.Find("Table").transform.GetChild(14).transform);
+        var table = GameObject.Find("Table").transform;
+        boardCardsPositions.Add(table.GetChild(10));
+        boardCardsPositions.Add(table.GetChild(11));
+        boardCardsPositions.Add(table.GetChild(12));
+        boardCardsPositions.Add(table.GetChild(13));
+        boardCardsPositions.Add(table.GetChild(14));
     }
+
     void Start()
     {
         InitializeDeck();
         ShuffleDeck();
     }
-    public void InitializeDeck()      //덱 초기화 및 생성
+
+    public void InitializeDeck()
     {
         deck.Clear();
         deck.AddRange(originalDeck);
-        Debug.Log("덱 생성");
     }
 
-    public void ShuffleDeck()       //덱 셔플
+    public void ShuffleDeck()
     {
-        InitializeDeck();       //덱 초기화
+        InitializeDeck();
 
-        Card[] allCardsInScene = FindObjectsOfType<Card>();     //씬 내 모든 카드
-        for(int i =0; i< allCardsInScene.Length; i++)
-        {
-            Destroy(allCardsInScene[i].gameObject);             //씬 내 모든 카드 삭제
-        }
+        // 씬에 남아있는 카드 삭제
+        Card[] allCardsInScene = FindObjectsOfType<Card>();
+        for (int i = 0; i < allCardsInScene.Length; i++)
+            Destroy(allCardsInScene[i].gameObject);
 
-
+        // Fisher–Yates
         for (int i = 0; i < deck.Count; i++)
         {
-            int randIndex = Random.Range(i, deck.Count);
-            Card temp = deck[i];
-            deck[i] = deck[randIndex];
-            deck[randIndex] = temp;
+            int r = Random.Range(i, deck.Count);
+            var tmp = deck[i];
+            deck[i] = deck[r];
+            deck[r] = tmp;
         }
+
         Debug.Log("덱 셔플 완료");
     }
 
-    public void Preplop()       // 프리플랍
+    // ✅ SB → … → BTN 순서로 두 장씩 배분 (버튼이 마지막으로 받음)
+    public void PreflopDealInOrder(List<Seat> order)
     {
-        // 번 카드 한 장
-        if (deck.Count > 0)
-            deck.RemoveAt(0);
-
-        // 좌석 리스트 초기화
-        seats.Clear();
-
-        // 모든 좌석 탐색
-        GameObject[] allSeats = GameObject.FindGameObjectsWithTag("Seat");
-
-        for (int i = 0; i < allSeats.Length; i++)
+        if (order == null || order.Count == 0)
         {
-            GameObject seatObj = allSeats[i];
-            Seat seat = seatObj.GetComponent<Seat>();
-
-            if (seat != null && seat.isSeated)
-            {
-                seats.Add(seat);
-            }
-            else
-            {
-                Debug.Log($"[Preflop] 착석중인 플레이어 X ({seatObj.name})");
-            }
-        }
-
-        Debug.Log($"[Preflop] 현재 착석중인 좌석 수: {seats.Count}");
-
-        if (deck.Count <= 0)
-        {
-            Debug.LogWarning("[Preflop] 덱에 카드가 없습니다.");
+            Debug.LogWarning("Preflop order empty");
             return;
         }
 
-        float cardOffset = 0.9f; // 카드 간격
+        // 번 카드 1장
+        if (deck.Count > 0) deck.RemoveAt(0);
 
-        // 각 좌석에 2장씩 배분
-        for (int i = 0; i < seats.Count; i++)
+        float cardOffset = 0.9f;
+
+        // 첫 바퀴 (각자 첫 장)
+        for (int i = 0; i < order.Count; i++)
         {
-            Seat seat = seats[i];
-            if (seat == null) continue;
+            var seat = order[i];
+            if (seat == null || !seat.isSeated) continue;
 
-            // 플레이어 오브젝트 탐색 (자식으로 있다고 가정)
-            Player player = seat.GetComponentInChildren<Player>(true);
+            var player = seat.GetComponentInChildren<Player>(true);
             Transform parent = (player != null) ? player.transform : seat.transform;
 
-            // 1️⃣ 첫 번째 카드
             if (deck.Count > 0)
             {
-                Card newCard = Instantiate(deck[0], seat.transform.position, Quaternion.identity);
-                newCard.transform.SetParent(parent, worldPositionStays: true);
+                Card c = Instantiate(deck[0], seat.transform.position, Quaternion.identity);
+                c.transform.SetParent(parent, true);
                 deck.RemoveAt(0);
             }
+        }
 
-            // 2️⃣ 두 번째 카드
+        // 두 번째 바퀴 (오른쪽 오프셋)
+        for (int i = 0; i < order.Count; i++)
+        {
+            var seat = order[i];
+            if (seat == null || !seat.isSeated) continue;
+
+            var player = seat.GetComponentInChildren<Player>(true);
+            Transform parent = (player != null) ? player.transform : seat.transform;
+
             if (deck.Count > 0)
             {
-                Vector3 rightOffset = new Vector3(cardOffset, 0, 0);
-                Vector3 spawnPos = seat.transform.position + rightOffset;
-
-                Card newCard = Instantiate(deck[0], spawnPos, Quaternion.identity);
-                newCard.transform.SetParent(parent, worldPositionStays: true);
+                Vector3 spawnPos = seat.transform.position + new Vector3(cardOffset, 0, 0);
+                Card c = Instantiate(deck[0], spawnPos, Quaternion.identity);
+                c.transform.SetParent(parent, true);
                 deck.RemoveAt(0);
             }
         }
-
-        Debug.Log("[Preflop] 카드 배분 완료 (Player 자식으로 부착)");
     }
 
-    public void Plop()          //플랍
+    public void Plop()
     {
-        deck.RemoveAt(0);       //카드 한장 번
-        if (deck.Count > 0)
+        if (deck.Count > 0) deck.RemoveAt(0); // 번
+        for (int i = 0; i < 3; i++)
         {
-            for(int i=0; i<3; i++)
-            {
-                Card newCard = Instantiate(deck[0], boardCardsPositions[i].position, Quaternion.identity);
-                newCard.transform.SetParent(boardCardsPositions[i]);
-                deck.RemoveAt(0);
-            }
-            
-        }
-        else
-        {
-            Debug.Log("덱에 카드가 없습니다.");
-        }
-    }
-    public void Turn()          //턴
-    {
-        deck.RemoveAt(0);       //카드 한장 번
-        if (deck.Count > 0)
-        {
-            Card newCard = Instantiate(deck[0], boardCardsPositions[3].position, Quaternion.identity);
-            newCard.transform.SetParent(boardCardsPositions[3]);
+            if (deck.Count == 0) break;
+            Card c = Instantiate(deck[0], boardCardsPositions[i].position, Quaternion.identity);
+            c.transform.SetParent(boardCardsPositions[i], true);
             deck.RemoveAt(0);
         }
-        else
-        {
-            Debug.Log("덱에 카드가 없습니다.");
-        }
-
     }
-    public void River()         //리버
+
+    public void Turn()
     {
-        deck.RemoveAt(0);       //카드 한장 번
+        if (deck.Count > 0) deck.RemoveAt(0); // 번
         if (deck.Count > 0)
         {
-            Card newCard = Instantiate(deck[0], boardCardsPositions[4].position, Quaternion.identity);
-            newCard.transform.SetParent(boardCardsPositions[4]);
+            Card c = Instantiate(deck[0], boardCardsPositions[3].position, Quaternion.identity);
+            c.transform.SetParent(boardCardsPositions[3], true);
             deck.RemoveAt(0);
         }
-        else
+    }
+
+    public void River()
+    {
+        if (deck.Count > 0) deck.RemoveAt(0); // 번
+        if (deck.Count > 0)
         {
-            Debug.Log("덱에 카드가 없습니다.");
+            Card c = Instantiate(deck[0], boardCardsPositions[4].position, Quaternion.identity);
+            c.transform.SetParent(boardCardsPositions[4], true);
+            deck.RemoveAt(0);
         }
     }
+
     public List<CardData> GetBoardCardData()
     {
         var result = new List<CardData>();
-        foreach (var t in boardCardsPositions) // 너가 이미 갖고있는 Transform 리스트
+        foreach (var t in boardCardsPositions)
         {
             var c = t.GetComponentInChildren<Card>();
             if (c != null) result.Add(c.cardData);

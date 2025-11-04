@@ -1,23 +1,23 @@
-using System.Collections.Generic;
+ï»¿using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
 public class Pot
 {
-    public int amount;                    // ÀÌ ÆÌÀÇ ÃÑ ±İ¾×
-    public HashSet<Player> eligible;      // ÀÌ ÆÌÀ» µş ¼ö ÀÖ´Â ÇÃ·¹ÀÌ¾î(Æúµå Á¦¿Ü)
+    public int amount;                    // ì´ íŒŸì˜ ì´ ê¸ˆì•¡
+    public HashSet<Player> eligible;      // ì´ íŒŸì„ ë”¸ ìˆ˜ ìˆëŠ” í”Œë ˆì´ì–´(í´ë“œ ì œì™¸)
 }
 
 public static class SidePot
 {
     /// <summary>
-    /// ¸ğµç ÇÃ·¹ÀÌ¾îÀÇ ÃÖÁ¾ ±â¿©¾×À» ±â¹İÀ¸·Î »çÀÌµåÆÌÀ» »ı¼ºÇÑ´Ù.
-    /// - ±İ¾× ÇÕ»ê¿¡´Â Æúµå ÇÃ·¹ÀÌ¾îµµ Æ÷ÇÔ (ÀÌ¹Ì ³½ µ·Àº ÆÌ¿¡ ³²À½)
-    /// - ´çÃ· ÀÚ°İ(eligible)Àº canPlay==true ÀÎ ÇÃ·¹ÀÌ¾î¸¸
+    /// ëª¨ë“  í”Œë ˆì´ì–´ì˜ ìµœì¢… ê¸°ì—¬ì•¡ì„ ê¸°ë°˜ìœ¼ë¡œ ì‚¬ì´ë“œíŒŸì„ ìƒì„±í•œë‹¤.
+    /// - ê¸ˆì•¡ í•©ì‚°ì—ëŠ” í´ë“œ í”Œë ˆì´ì–´ë„ í¬í•¨ (ì´ë¯¸ ë‚¸ ëˆì€ íŒŸì— ë‚¨ìŒ)
+    /// - ë‹¹ì²¨ ìê²©(eligible)ì€ canPlay==true ì¸ í”Œë ˆì´ì–´ë§Œ
     /// </summary>
     public static List<Pot> BuildPots(List<Player> allPlayers)
     {
-        // ±â¿©¾× ¸Ê
+        // ê¸°ì—¬ì•¡ ë§µ
         var contrib = new Dictionary<Player, int>();
         foreach (var p in allPlayers)
         {
@@ -27,7 +27,7 @@ public static class SidePot
         }
         if (contrib.Count == 0) return new List<Pot>();
 
-        // ·¹º§(±â¿©¾× ±¸°£) = ¿À¸§Â÷¼øÀÇ distinct ±â¿©¾×
+        // ë ˆë²¨(ê¸°ì—¬ì•¡ êµ¬ê°„) = ì˜¤ë¦„ì°¨ìˆœì˜ distinct ê¸°ì—¬ì•¡
         var levels = contrib.Values.Distinct().OrderBy(v => v).ToList();
 
         var pots = new List<Pot>();
@@ -39,12 +39,12 @@ public static class SidePot
             int delta = level - prev;
             if (delta <= 0) { prev = level; continue; }
 
-            // ÀÌ ±¸°£¿¡ Âü¿©(µ·ÀÌ °É¸°)ÇÑ ¸ğµç ÇÃ·¹ÀÌ¾î ¼ö: contrib >= level
+            // ì´ êµ¬ê°„ì— ì°¸ì—¬(ëˆì´ ê±¸ë¦°)í•œ ëª¨ë“  í”Œë ˆì´ì–´ ìˆ˜: contrib >= level
             var participantsForMoney = contrib.Where(kv => kv.Value >= level).Select(kv => kv.Key).ToList();
             int countMoney = participantsForMoney.Count;
             int potAmount = delta * countMoney;
 
-            // ÀÌ ÆÌÀ» µş ÀÚ°İ(Æúµå Á¦¿Ü): canPlay==true AND contrib >= level
+            // ì´ íŒŸì„ ë”¸ ìê²©(í´ë“œ ì œì™¸): canPlay==true AND contrib >= level
             var eligible = new HashSet<Player>(
                 participantsForMoney.Where(p => p.canPlay)
             );
@@ -58,11 +58,12 @@ public static class SidePot
     }
 
     /// <summary>
-    /// °¢ ÆÌº°·Î ½ÂÀÚ¸¦ »Ì¾Æ ºĞ¹èÇÑ´Ù. (½ºÇÃ¸´ ½Ã ±Õµî ºĞ¹è, ³ª¸ÓÁö´Â Ã¹ ½ÂÀÚ¿¡°Ô)
+    /// ê° íŒŸë³„ë¡œ ìŠ¹ìë¥¼ ë½‘ì•„ ë¶„ë°°í•œë‹¤. (ìŠ¤í”Œë¦¿ ì‹œ ê· ë“± ë¶„ë°°, ë‚˜ë¨¸ì§€ëŠ” ì²« ìŠ¹ìì—ê²Œ)
     /// </summary>
-    public static void DistributeAllPots(List<Pot> pots, List<CardData> board5)
+    public static string DistributeAllPots(List<Pot> pots, List<CardData> board5)
     {
         int totalPaid = 0;
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
 
         for (int i = 0; i < pots.Count; i++)
         {
@@ -72,31 +73,43 @@ public static class SidePot
             var eligibles = pot.eligible?.Where(p => p != null && p.canPlay).ToList() ?? new List<Player>();
             if (eligibles.Count == 0)
             {
-                Debug.LogWarning($"[SidePot] pot#{i} eligible=0 ¡æ ÇÏ¿ì½º¿¡ ±Í¼Ó(È¤Àº µô·¯ ±ÔÄ¢ ÇÊ¿ä). amount={pot.amount}");
+                sb.AppendLine($"[Pot {i}] No eligible players (amount={pot.amount:N0})");
+                Debug.LogWarning($"[SidePot] pot#{i} eligible=0 â†’ í•˜ìš°ìŠ¤ì— ê·€ì†. amount={pot.amount}");
                 continue;
             }
 
-            // ÆÌº° ½ÂÀÚ ÆÇÁ¤
+            // íŒŸë³„ ìŠ¹ì íŒì •
             var winners = WinnerEvaluator.DecideWinners(eligibles, board5);
             if (winners.Count == 0)
             {
-                Debug.LogWarning($"[SidePot] pot#{i} winners=0 ¡æ ±ÔÄ¢»ó Ã³¸® ÇÊ¿ä. amount={pot.amount}");
+                sb.AppendLine($"[Pot {i}] No winners (amount={pot.amount:N0})");
+                Debug.LogWarning($"[SidePot] pot#{i} winners=0 â†’ ê·œì¹™ìƒ ì²˜ë¦¬ í•„ìš”. amount={pot.amount}");
                 continue;
             }
 
             int share = pot.amount / winners.Count;
             int rem = pot.amount % winners.Count;
 
-            foreach (var w in winners) w.playerChip += share;
+            foreach (var w in winners)
+            {
+                w.playerChip += share;
+            }
 
-            // ³²´Â 1~(n-1)Ä¨Àº ÀÓ½Ã·Î Ã¹ ½ÂÀÚ¿¡°Ô
+            // ë‚¨ëŠ” 1~(n-1)ì¹©ì€ ì²« ìŠ¹ìì—ê²Œ
             winners[0].playerChip += rem;
 
             totalPaid += pot.amount;
 
-            Debug.Log($"[SidePot] pot#{i} amount={pot.amount:N0}, winners={winners.Count}, share={share:N0}, rem={rem}");
+            // ë¬¸ìì—´ ìš”ì•½
+            sb.AppendLine($"[Pot {i}] {string.Join(", ", winners.Select(w => w.name))} " +
+                          $"won {share + (rem > 0 ? rem : 0):N0} each ({pot.amount:N0} total)");
         }
 
-        Debug.Log($"[SidePot] ÃÑ ºĞ¹è ±İ¾× = {totalPaid:N0}");
+        sb.AppendLine($"Total paid out: {totalPaid:N0}");
+        Debug.Log($"[SidePot] ì´ ë¶„ë°° ê¸ˆì•¡ = {totalPaid:N0}");
+
+        // ë¬¸ìì—´ ë°˜í™˜
+        return sb.ToString();
     }
+
 }
