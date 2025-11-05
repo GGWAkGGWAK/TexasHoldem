@@ -21,28 +21,42 @@ public class GamaManager : MonoBehaviour
     public float bettingTime;
     public Text potsText;
 
+    // Winner Text (GameManager 내부에서 처리)
+    public Text winnerText;
+
     [Header("Turn / Street")]
     public List<Player> turnOrder = new List<Player>();
     public int currentIndex = -1;
     public Street currentStreet = Street.Preflop;
 
+    [Header("Seats / Button")]
     public List<Seat> seatOrder = new List<Seat>();
-    public int buttonIndex = 9;  // 첫 게임: 10번 좌석
+    public int buttonIndex = 9; // 첫 핸드: 10번 자리(0-base 9)
     public int sbIndex = -1;
     public int bbIndex = -1;
 
+    [Header("Flow")]
     private int lastAggressorIndex = -1;
     private int actorsToAct = 0;
     public float nextHandDelay = 3f;
 
-    private void Awake()
-    {
-        Transform canvas = GameObject.Find("Canvas").transform;
-        potsText = canvas.Find("팟").GetComponent<Text>();
-    }
+    // 딜러버튼 오브젝트가 있으면 부드럽게 이동
+    private DealerButton dealerButton;
 
     private IEnumerator Start()
     {
+        // UI 참조
+        var canvas = GameObject.Find("Canvas").transform;
+        potsText = canvas.Find("팟").GetComponent<Text>();
+        var wObj = canvas.Find("승자표시");
+        if (wObj != null) winnerText = wObj.GetComponent<Text>();
+        HideWinnersUI(); // 시작 시 숨김
+
+        // 딜러버튼(있으면 연동)
+        var dbObj = GameObject.Find("DealerButton");
+        if (dbObj != null) dealerButton = dbObj.GetComponent<DealerButton>();
+
+        // 기본 값
         smallBlind = 10000;
         BigBlind = 20000;
         duration = 180;
@@ -52,17 +66,20 @@ public class GamaManager : MonoBehaviour
         BuildSeatOrder();
         BuildTurnOrderBySeats();
 
+        // 첫 핸드 버튼 고정(10번 → index 9)
         RotateButtonToNextOccupied(fixedButtonStart: true);
+        TeleportDealerButton();
+
+        // 새 핸드 시작
         BeginNewHand();
     }
 
     private void Update()
     {
-        if (potsText != null)
-            potsText.text = "Pots: " + pots.ToString("N0");
+        if (potsText != null) potsText.text = "Pots: " + pots.ToString("N0");
     }
 
-    // --------------------- 좌석/턴 ---------------------
+    // ========== 좌석/턴 구성 ==========
     public void BuildSeatOrder()
     {
         seatOrder.Clear();
@@ -78,10 +95,10 @@ public class GamaManager : MonoBehaviour
         {
             var p = seat.GetComponentInChildren<Player>(true);
             seat.isSeated = (p != null);
-            if (p != null)
-                turnOrder.Add(p);
+            if (p != null) turnOrder.Add(p);
         }
-        foreach (var p in turnOrder) p.isMyTurn = false;
+        foreach (var p in turnOrder) if (p != null) p.isMyTurn = false;
+        Debug.Log($"[TurnOrder] 수집된 플레이어 수: {turnOrder.Count}");
     }
 
     private int NextOccupiedSeatIndex(int from)
@@ -105,14 +122,14 @@ public class GamaManager : MonoBehaviour
         return (idx >= 0) ? idx : 0;
     }
 
-    // --------------------- 버튼 회전 ---------------------
+    // ========== 버튼 회전 / 이동 ==========
     public void RotateButtonToNextOccupied(bool fixedButtonStart = false)
     {
         if (seatOrder.Count == 0) BuildSeatOrder();
 
         if (fixedButtonStart)
         {
-            buttonIndex = 9; // 첫 핸드 10번
+            buttonIndex = 9; // 10번
             if (seatOrder[buttonIndex] == null || !seatOrder[buttonIndex].isSeated)
                 buttonIndex = NextOccupiedSeatIndex(9);
         }
@@ -127,9 +144,25 @@ public class GamaManager : MonoBehaviour
         Debug.Log($"[Button] BTN={buttonIndex + 1}, SB={sbIndex + 1}, BB={bbIndex + 1}");
     }
 
-    // --------------------- 핸드 시작 ---------------------
+    private void TeleportDealerButton()
+    {
+        if (dealerButton == null) return;
+        var seat = seatOrder.ElementAtOrDefault(buttonIndex);
+        if (seat != null) dealerButton.TeleportTo(seat.transform);
+    }
+
+    private void MoveDealerButton()
+    {
+        if (dealerButton == null) return;
+        var seat = seatOrder.ElementAtOrDefault(buttonIndex);
+        if (seat != null) dealerButton.MoveTo(seat.transform);
+    }
+
+    // ========== 새 핸드 시작 ==========
     public void BeginNewHand()
     {
+        HideWinnersUI();
+
         var deck = FindObjectOfType<Deck>();
         if (deck == null) return;
 
@@ -151,7 +184,7 @@ public class GamaManager : MonoBehaviour
         var order = BuildPreflopOrderSBtoBTN();
         deck.PreflopDealInOrder(order);
 
-        // ✅ 프리플랍은 UTG(=BB 다음)부터
+        // 프리플랍은 UTG부터
         int utgSeatIdx = NextOccupiedSeatIndex(bbIndex);
         int utgTurnIdx = TurnIndexFromSeatIndex(utgSeatIdx);
         StartBettingRound(utgTurnIdx);
@@ -194,7 +227,7 @@ public class GamaManager : MonoBehaviour
         Debug.Log($"[Blinds] SB={sb.name}:{sbPay}, BB={bb.name}:{bbPay}");
     }
 
-    // --------------------- 베팅 라운드 ---------------------
+    // ========== 베팅 라운드 ==========
     public void StartBettingRound(int firstTurnIndex)
     {
         if (currentStreet != Street.Preflop)
@@ -203,44 +236,38 @@ public class GamaManager : MonoBehaviour
             beforeRaiseChip = 0;
         }
 
-        foreach (var p in turnOrder)
-            if (p != null) p.isMyTurn = false;
+        foreach (var p in turnOrder) if (p != null) p.isMyTurn = false;
 
         currentIndex = Mathf.Clamp(firstTurnIndex, 0, turnOrder.Count - 1);
         turnOrder[currentIndex].isMyTurn = true;
 
         lastAggressorIndex = -1;
         actorsToAct = ActivePlayersCount();
-        Debug.Log($"[RoundStart] {currentStreet}, First={turnOrder[currentIndex].name}");
+
+        Debug.Log($"[RoundStart] {currentStreet}, First={turnOrder[currentIndex].name}, Actors={actorsToAct}");
     }
 
     public int ActivePlayersCount()
     {
         int cnt = 0;
         foreach (var p in turnOrder)
-            if (p != null && p.canPlay && p.playerChip > 0)
-                cnt++;
+            if (p != null && p.canPlay && p.playerChip > 0) cnt++;
         return cnt;
     }
 
     public void RegisterAction(Player actor, ActionType action, bool isRaise)
     {
         if (action == ActionType.Fold)
-        {
             actorsToAct = Mathf.Max(actorsToAct - 1, 0);
-        }
         else if (isRaise)
         {
             lastAggressorIndex = turnOrder.IndexOf(actor);
             actorsToAct = ActivePlayersCount() - 1;
         }
         else
-        {
             actorsToAct = Mathf.Max(actorsToAct - 1, 0);
-        }
 
-        int alive = ActivePlayersCount();
-        if (alive <= 1)
+        if (ActivePlayersCount() <= 1)
         {
             WinByAllFold();
             return;
@@ -253,6 +280,7 @@ public class GamaManager : MonoBehaviour
     public void NextTurnFrom(Player actor)
     {
         if (turnOrder.Count == 0) return;
+
         int idx = turnOrder.IndexOf(actor);
         if (idx < 0) idx = currentIndex;
         actor.isMyTurn = false;
@@ -273,6 +301,7 @@ public class GamaManager : MonoBehaviour
     public void HandleFoldAndPassTurn(Player actor)
     {
         if (turnOrder.Count == 0) return;
+
         int removedIndex = turnOrder.IndexOf(actor);
         if (removedIndex < 0) removedIndex = currentIndex;
 
@@ -301,7 +330,7 @@ public class GamaManager : MonoBehaviour
         }
     }
 
-    // --------------------- 스트리트 전환 ---------------------
+    // ========== 스트리트 전환 ==========
     public void AdvanceStreet()
     {
         var deck = FindObjectOfType<Deck>();
@@ -310,7 +339,7 @@ public class GamaManager : MonoBehaviour
             case Street.Preflop:
                 currentStreet = Street.Flop;
                 deck.Plop();
-                // ✅ 플랍 이후 SB부터 액션 시작
+                // 플랍부터는 SB부터 액션
                 StartBettingRound(TurnIndexFromSeatIndex(sbIndex));
                 break;
 
@@ -333,7 +362,7 @@ public class GamaManager : MonoBehaviour
         }
     }
 
-    // --------------------- 쇼다운/올폴드 ---------------------
+    // ========== 쇼다운 / 올폴드 ==========
     private void ResolveShowdown()
     {
         var deck = FindObjectOfType<Deck>();
@@ -341,12 +370,14 @@ public class GamaManager : MonoBehaviour
 
         var activePlayers = new List<Player>();
         foreach (var p in turnOrder)
-            if (p != null && p.canPlay)
-                activePlayers.Add(p);
+            if (p != null && p.canPlay) activePlayers.Add(p);
 
         var winners = WinnerEvaluator.DecideWinners(activePlayers, board5);
         WinnerEvaluator.DistributePot(pots, winners);
         pots = 0;
+
+        // WinnerText 표시
+        ShowWinnersUI(winners, board5, suffix: "");
 
         StartCoroutine(Co_NextHandAfterDelay(nextHandDelay));
     }
@@ -355,14 +386,19 @@ public class GamaManager : MonoBehaviour
     {
         var alive = new List<Player>();
         foreach (var p in turnOrder)
-            if (p != null && p.canPlay)
-                alive.Add(p);
+            if (p != null && p.canPlay) alive.Add(p);
 
         if (alive.Count == 1)
         {
             alive[0].playerChip += pots;
             pots = 0;
-            Debug.Log($"[AllFold] {alive[0].name} wins by default.");
+            // ✅ WinnerText (올폴드)
+            ShowWinnersUI(new List<Player> { alive[0] }, null, suffix: " (All Fold)");
+        }
+        else
+        {
+            // 이론상 거의 없음
+            ShowWinnersUI(new List<Player>(), null, suffix: "");
         }
 
         StartCoroutine(Co_NextHandAfterDelay(nextHandDelay));
@@ -371,7 +407,54 @@ public class GamaManager : MonoBehaviour
     private IEnumerator Co_NextHandAfterDelay(float sec)
     {
         yield return new WaitForSeconds(sec);
+
+        // 버튼 회전 + 이동
         RotateButtonToNextOccupied(fixedButtonStart: false);
+        MoveDealerButton();
+
+        // 다음 핸드 시작 전 UI 숨김
+        HideWinnersUI();
+
+        yield return new WaitForSeconds(0.5f);
         BeginNewHand();
+    }
+
+    // ========== WinnerText 내부 처리 ==========
+    private void ShowWinnersUI(List<Player> winners, List<CardData> board5, string suffix)
+    {
+        if (winnerText == null)
+            return;
+
+        if (winners == null || winners.Count == 0)
+        {
+            winnerText.text = "No Winner";
+            winnerText.gameObject.SetActive(true);
+            return;
+        }
+
+        // 표기용 족보명
+        string cat = "HighCard";
+        if (board5 != null && board5.Count > 0)
+        {
+            // 첫 승자의 베스트 핸드로 카테고리 표기
+            var hole = winners[0].GetComponentsInChildren<Card>()
+                                 .Select(c => c.cardData)
+                                 .ToList();
+            if (hole.Count >= 2)
+            {
+                var hv = HandEvaluator.EvaluateBestFromHoleAndBoard(hole, board5);
+                cat = hv.Category.ToString();
+            }
+        }
+
+        string names = string.Join(", ", winners.ConvertAll(w => w.name));
+        winnerText.text = $"🏆 {names}\n({cat}){suffix}";
+        winnerText.gameObject.SetActive(true);
+    }
+
+    private void HideWinnersUI()
+    {
+        if (winnerText != null)
+            winnerText.gameObject.SetActive(false);
     }
 }

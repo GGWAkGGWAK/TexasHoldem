@@ -98,7 +98,7 @@ public class Player : MonoBehaviour
         {
             gm.pots += chip;
             gm.beforeBettingChip = chip;
-            gm.beforeRaiseChip = chip - currentToCall; // ✅ 첫 오픈은 레이즈 크기 정의
+            gm.beforeRaiseChip = chip - currentToCall; // 첫 오픈은 레이즈 크기 정의
             playerChip -= chip;
             contributedThisHand += chip;
             isMyTurn = false;

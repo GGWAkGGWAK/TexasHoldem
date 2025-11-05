@@ -53,7 +53,7 @@ public class Deck : MonoBehaviour
         Debug.Log("덱 셔플 완료");
     }
 
-    // ✅ SB → … → BTN 순서로 두 장씩 배분 (버튼이 마지막으로 받음)
+    //SB → … → BTN 순서로 두 장씩 배분 (버튼이 마지막으로 받음)
     public void PreflopDealInOrder(List<Seat> order)
     {
         if (order == null || order.Count == 0)
