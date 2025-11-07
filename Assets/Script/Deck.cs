@@ -62,9 +62,6 @@ public class Deck : MonoBehaviour
             return;
         }
 
-        // 번 카드 1장
-        if (deck.Count > 0) deck.RemoveAt(0);
-
         float cardOffset = 0.9f;
 
         // 첫 바퀴 (각자 첫 장)
