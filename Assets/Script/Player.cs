@@ -10,7 +10,8 @@ public class Player : MonoBehaviour
     public bool isMyTurn;
 
     public bool isAllIn;
-    public int contributedThisHand;
+    public int contributedThisHand = 0;
+    public int contributedThisRound = 0;
 
     private bool isAdjustingRaise = false;
     private int raiseStep = 10000;
@@ -47,7 +48,7 @@ public class Player : MonoBehaviour
     private void InitializeRaiseSlider()
     {
         int minRaise = (gm.beforeRaiseChip == 0)
-            ? gm.BigBlind * 2
+            ? gm.bigBlind * 2
             : gm.beforeBettingChip + gm.beforeRaiseChip;
 
         raiseSlider.minValue = minRaise;
@@ -60,7 +61,6 @@ public class Player : MonoBehaviour
     {
         if (!isMyTurn)
         {
-            Debug.Log("아직 차례가 아닙니다!");
             return;
         }
 
@@ -94,7 +94,7 @@ public class Player : MonoBehaviour
         if (chip >= playerChip) { Allin(); return; }
 
         int currentToCall = gm.beforeBettingChip; // 보통 0인 스트리트에서 오픈
-        if (playerChip > gm.BigBlind && chip >= gm.BigBlind)
+        if (playerChip > gm.bigBlind && chip >= gm.bigBlind)
         {
             gm.pots += chip;
             gm.beforeBettingChip = chip;
@@ -115,33 +115,53 @@ public class Player : MonoBehaviour
     {
         if (!isMyTurn) return;
 
-        int toCall = gm.beforeBettingChip;
+        int callAmount = gm.beforeBettingChip;
+        int alreadyContributed = contributedThisRound;
+        int additionalAmount = callAmount - alreadyContributed;
 
-        if (playerChip >= toCall)
+        // 이미 충분히 냈다면 체크와 동일
+        if (additionalAmount <= 0)
         {
-            gm.pots += toCall;
-            playerChip -= toCall;
-            contributedThisHand += toCall;
             isMyTurn = false;
 
-            // 스트리트 변화 감지를 위한 현재 스트리트 저장
             var streetBeforeAction = gm.currentStreet;
-            Debug.Log($"[{name} Call] Before RegisterAction - Street: {streetBeforeAction}");
-
             gm.RegisterAction(this, ActionType.Call, false);
-
             var streetAfterAction = gm.currentStreet;
-            Debug.Log($"[{name} Call] After RegisterAction - Street: {streetAfterAction}");
 
-            // 스트리트가 바뀌었으면 NextTurnFrom 호출하지 않음!
             if (streetBeforeAction == streetAfterAction)
             {
-                Debug.Log($"[{name} Call] Street unchanged - calling NextTurnFrom");
                 gm.NextTurnFrom(this);
             }
-            else
+
+            if (raisePanel != null && raisePanel.activeSelf)
+                raisePanel.SetActive(false);
+            return;
+        }
+
+        // 가진 돈보다 많이 내야 하면 올인
+        if (additionalAmount >= playerChip)
+        {
+            Allin();
+            return;
+        }
+
+        // 추가 금액만 지불
+        if (playerChip >= additionalAmount)
+        {
+            gm.pots += additionalAmount;
+            playerChip -= additionalAmount;
+            contributedThisHand += additionalAmount;
+            contributedThisRound += additionalAmount;
+
+            isMyTurn = false;
+
+            var streetBeforeAction = gm.currentStreet;
+            gm.RegisterAction(this, ActionType.Call, false);
+            var streetAfterAction = gm.currentStreet;
+
+            if (streetBeforeAction == streetAfterAction)
             {
-                Debug.Log($"[{name} Call] Street changed ({streetBeforeAction} → {streetAfterAction}) - NextTurnFrom skipped");
+                gm.NextTurnFrom(this);
             }
         }
         else
@@ -162,17 +182,14 @@ public class Player : MonoBehaviour
 
         // 스트리트 변화 감지
         var streetBeforeAction = gm.currentStreet;
-        Debug.Log($"[{name} Fold] Before RegisterAction - Street: {streetBeforeAction}");
 
         gm.RegisterAction(this, ActionType.Fold, false);
 
         var streetAfterAction = gm.currentStreet;
-        Debug.Log($"[{name} Fold] After RegisterAction - Street: {streetAfterAction}");
 
         // 스트리트가 바뀌었으면 NextTurnFrom 호출하지 않음!
         if (streetBeforeAction == streetAfterAction)
         {
-            Debug.Log($"[{name} Fold] Street unchanged - calling NextTurnFrom");
             gm.NextTurnFrom(this);
         }
         else
@@ -192,17 +209,14 @@ public class Player : MonoBehaviour
 
         // 스트리트 변화 감지
         var streetBeforeAction = gm.currentStreet;
-        Debug.Log($"[{name} Check] Before RegisterAction - Street: {streetBeforeAction}");
 
         gm.RegisterAction(this, ActionType.Check, false);
 
         var streetAfterAction = gm.currentStreet;
-        Debug.Log($"[{name} Check] After RegisterAction - Street: {streetAfterAction}");
 
         // 스트리트가 바뀌었으면 NextTurnFrom 호출하지 않음!
         if (streetBeforeAction == streetAfterAction)
         {
-            Debug.Log($"[{name} Check] Street unchanged - calling NextTurnFrom");
             gm.NextTurnFrom(this);
         }
         else
@@ -228,13 +242,11 @@ public class Player : MonoBehaviour
             isMyTurn = false;
 
             var streetBeforeAction = gm.currentStreet;
-            Debug.Log($"[{name} Raise] Before RegisterAction - Street: {streetBeforeAction}, TotalBet: {totalBet}");
 
             // 레이즈된 총 금액을 GameManager에 전달
             gm.RegisterAction(this, ActionType.Raise, true, totalBet);  // 파라미터 추가
 
             var streetAfterAction = gm.currentStreet;
-            Debug.Log($"[{name} Raise] After RegisterAction - Street: {streetAfterAction}");
 
             if (streetBeforeAction == streetAfterAction)
             {
@@ -264,17 +276,14 @@ public class Player : MonoBehaviour
 
         // 스트리트 변화 감지
         var streetBeforeAction = gm.currentStreet;
-        Debug.Log($"[{name} Allin] Before RegisterAction - Street: {streetBeforeAction}, Amount: {allInAmount}, IsRaise: {isRaiseAction}");
 
         gm.RegisterAction(this, ActionType.AllIn, isRaiseAction);
 
         var streetAfterAction = gm.currentStreet;
-        Debug.Log($"[{name} Allin] After RegisterAction - Street: {streetAfterAction}");
 
         // 스트리트가 바뀌었으면 NextTurnFrom 호출하지 않음!
         if (streetBeforeAction == streetAfterAction)
         {
-            Debug.Log($"[{name} Allin] Street unchanged - calling NextTurnFrom");
             gm.NextTurnFrom(this);
         }
         else

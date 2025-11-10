@@ -33,10 +33,6 @@ public static class WinnerEvaluator
             }
         }
 
-        Debug.Log($"🏆 승자 수: {winners.Count}, 족보: {bestValue.Category}");
-        foreach (var w in winners)
-            Debug.Log($"→ Winner: {w.name}");
-
         return winners;
     }
 
@@ -51,6 +47,5 @@ public static class WinnerEvaluator
             w.playerChip += share;
         }
 
-        Debug.Log($"💰 {totalPot}칩을 {winners.Count}명에게 분배 ({share}씩)");
     }
 }

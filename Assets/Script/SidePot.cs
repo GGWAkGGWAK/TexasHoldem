@@ -106,7 +106,6 @@ public static class SidePot
         }
 
         sb.AppendLine($"Total paid out: {totalPaid:N0}");
-        Debug.Log($"[SidePot] 총 분배 금액 = {totalPaid:N0}");
 
         // 문자열 반환
         return sb.ToString();

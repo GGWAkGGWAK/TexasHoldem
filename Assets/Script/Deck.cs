@@ -50,7 +50,6 @@ public class Deck : MonoBehaviour
             deck[r] = tmp;
         }
 
-        Debug.Log("덱 셔플 완료");
     }
 
     //SB → … → BTN 순서로 두 장씩 배분 (버튼이 마지막으로 받음)
