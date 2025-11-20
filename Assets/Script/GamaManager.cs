@@ -29,12 +29,12 @@ public class GamaManager : MonoBehaviour
 
     [Header("Seats / Button")]
     public List<Seat> seatOrder = new List<Seat>();
-    public int buttonIndex = 9;   // 10번(0-base 9)에서 시작, 항상 한 칸식 ++
-    public int sbIndex = -1;
-    public int bbIndex = -1;
+    public int buttonIndex = 9;
+    public int sbIndex = 0;
+    public int bbIndex = 1;
 
     [Header("Player Management")]
-    public GameObject playerPrefab; // 플레이어 프리팹
+    public GameObject playerPrefab;
 
     [Header("Flow")]
     private int lastAggressorIndex = -1;
@@ -160,6 +160,92 @@ public class GamaManager : MonoBehaviour
 
         return newPlayerObj;
     }
+    // ========== 플레이어 아웃 시스템 ==========
+
+    /// 쇼다운 후 칩이 0인 플레이어들을 아웃시키는 처리
+    private void ProcessEliminatedPlayers()
+    {
+        List<Player> eliminatedPlayers = new List<Player>();
+
+        foreach (var player in turnOrder.ToList())
+        {
+            if (player != null && player.playerChip <= 0)
+            {
+                eliminatedPlayers.Add(player);
+            }
+        }
+
+        foreach (var player in eliminatedPlayers)
+        {
+            EliminatePlayer(player);
+        }
+    }
+
+    /// 개별 플레이어 제거 처리
+    private void EliminatePlayer(Player player)
+    {
+        if (player == null) return;
+
+        Debug.Log($"🚨 {player.name}이(가) 아웃되었습니다!");
+
+        RemovePlayerFromSeat(player);
+        RemovePlayerFromTurnOrder(player);
+        RecalculateIndicesAfterElimination();
+    }
+
+    /// 좌석에서 플레이어 제거
+    private void RemovePlayerFromSeat(Player player)
+    {
+        if (player == null) return;
+
+        var seat = seatOrder.FirstOrDefault(s => s != null && GetPlayerAtSeat(s) == player);
+        if (seat != null)
+        {
+            seat.isSeated = false;
+            Destroy(player.gameObject); // 플레이어 오브젝트 완전 삭제
+        }
+    }
+
+    /// 턴 순서에서 플레이어 제거
+    private void RemovePlayerFromTurnOrder(Player player)
+    {
+        if (turnOrder.Contains(player))
+        {
+            int playerTurnIndex = turnOrder.IndexOf(player);
+            turnOrder.Remove(player);
+
+            if (currentIndex > playerTurnIndex)
+            {
+                currentIndex--;
+            }
+            else if (currentIndex == playerTurnIndex && currentIndex >= turnOrder.Count)
+            {
+                currentIndex = turnOrder.Count > 0 ? 0 : -1;
+            }
+        }
+    }
+
+    /// 제거 후 인덱스 재조정
+    private void RecalculateIndicesAfterElimination()
+    {
+        BuildSeatOrder();
+        BuildTurnOrderBySeats();
+
+        if (seatOrder.Count == 0 || turnOrder.Count == 0) return;
+
+        buttonIndex = Mathf.Clamp(buttonIndex, 0, seatOrder.Count - 1);
+
+        if (GetPlayerAtSeat(seatOrder[buttonIndex]) == null)
+        {
+            buttonIndex = FindFirstActivePlayerSeat();
+        }
+
+        if (turnOrder.Count >= 2)
+        {
+            sbIndex = NextSeatWithPlayerFrom(buttonIndex);
+            bbIndex = NextSeatWithPlayerFrom(sbIndex);
+        }
+    }
     // ========== 좌석/턴 ==========
     public void BuildSeatOrder()
     {
@@ -277,17 +363,71 @@ public class GamaManager : MonoBehaviour
     private void TeleportDealerButton()
     {
         if (dealerButton == null) return;
-        var seat = (buttonIndex >= 0 && buttonIndex < seatOrder.Count) ? seatOrder[buttonIndex] : null;
-        if (seat != null) dealerButton.TeleportTo(seat.transform);
-    }
 
+        var player = (buttonIndex >= 0 && buttonIndex < turnOrder.Count) ? turnOrder[buttonIndex] : null;
+        if (player != null && player.gameObject != null)
+        {
+            dealerButton.TeleportTo(player.transform);
+        }
+    }
     private void MoveDealerButton()
     {
         if (dealerButton == null) return;
-        var seat = (buttonIndex >= 0 && buttonIndex < seatOrder.Count) ? seatOrder[buttonIndex] : null;
-        if (seat != null) dealerButton.MoveTo(seat.transform);
-    }
 
+        // buttonIndex를 turnOrder 기준으로 변환
+        var player = (buttonIndex >= 0 && buttonIndex < turnOrder.Count) ? turnOrder[buttonIndex] : null;
+        if (player != null && player.gameObject != null)
+        {
+            dealerButton.MoveTo(player.transform);
+        }
+    }
+    // 다음 핸드로 진행하기 전 버튼 이동
+    private void MoveButtonToNextPlayer()
+    {
+        if (turnOrder.Count < 2)
+        {
+            Debug.LogError("❌ 버튼 이동 불가: 플레이어가 2명 미만입니다!");
+            return;
+        }
+
+        // 버튼을 한 자리만 이동
+        buttonIndex = (buttonIndex + 1) % turnOrder.Count;
+
+        // 다음 플레이어가 활성(칩 > 0)인지 확인
+        if (turnOrder[buttonIndex].playerChip > 0)
+        {
+            Debug.Log($"[MoveButtonToNextPlayer] 버튼 이동 → turnOrder Index: {buttonIndex}");
+        }
+        else
+        {
+            // 탈락한 플레이어면 다음을 찾음
+            buttonIndex = FindNextActivePlayerIndex(buttonIndex);
+            Debug.Log($"[MoveButtonToNextPlayer] 탈락자 건너뛰고 → turnOrder Index: {buttonIndex}");
+        }
+    }
+    // 다음 활성 플레이어 찾기
+    private int FindNextActivePlayerIndex(int startIndex)
+    {
+        int searchIndex = (startIndex + 1) % turnOrder.Count;
+
+        // 한 번만 체크
+        if (turnOrder[searchIndex] != null && turnOrder[searchIndex].playerChip > 0)
+        {
+            return searchIndex;
+        }
+
+        // 그 다음도 없으면 처음부터 찾기
+        for (int i = 0; i < turnOrder.Count; i++)
+        {
+            if (turnOrder[i] != null && turnOrder[i].playerChip > 0)
+            {
+                return i;
+            }
+        }
+
+        Debug.LogError("❌ 활성 플레이어를 찾을 수 없습니다!");
+        return 0;
+    }
     // ========== 새 핸드 ==========
     public void BeginNewHand()
     {
@@ -300,26 +440,31 @@ public class GamaManager : MonoBehaviour
         beforeBettingChip = 0;
         currentStreet = Street.Preflop;
 
-        // 🆕 새로 추가된 플레이어들 포함하여 좌석/턴 순서 재스캔
+        // 새로 추가된 플레이어들 포함하여 좌석/턴 순서 재스캔
         BuildSeatOrder();
         BuildTurnOrderBySeats();
 
-        // 🔍 디버그: 현재 상태 출력
+        // 디버그: 현재 상태 출력
         Debug.Log($"[BeginNewHand] seatOrder.Count: {seatOrder?.Count ?? 0}, turnOrder.Count: {turnOrder?.Count ?? 0}");
 
-        // ⚠️ 최소 플레이어 수 체크
+        // 최소 플레이어 수 체크
         if (turnOrder == null || turnOrder.Count < 2)
         {
             Debug.LogError($"[BeginNewHand] ❌ 게임을 시작할 수 없습니다! 플레이어 수: {turnOrder?.Count ?? 0}");
             return;
         }
 
-        // 🎯 버튼/블라인드 인덱스 재계산
-        buttonIndex = Mathf.Clamp(buttonIndex, 0, seatOrder.Count - 1);
-        sbIndex = NextSeatWithPlayerFrom(buttonIndex);
-        bbIndex = NextSeatWithPlayerFrom(sbIndex);
+        // buttonIndex를 turnOrder 기준으로 조정
+        if (buttonIndex < 0 || buttonIndex >= turnOrder.Count)
+        {
+            buttonIndex = 0;
+        }
 
-        Debug.Log($"[BeginNewHand] buttonIndex: {buttonIndex}, sbIndex: {sbIndex}, bbIndex: {bbIndex}");
+        // Modulo 연산으로 SB, BB 인덱스 계산 (안전함)
+        sbIndex = (buttonIndex + 1) % turnOrder.Count;
+        bbIndex = (buttonIndex + 2) % turnOrder.Count;
+
+        Debug.Log($"[BeginNewHand] buttonIndex: {buttonIndex}, sbIndex: {sbIndex}, bbIndex: {bbIndex}, turnOrder.Count: {turnOrder.Count}");
 
         TeleportDealerButton();
 
@@ -420,21 +565,21 @@ public class GamaManager : MonoBehaviour
             return;
         }
 
-        // 인덱스 유효성 체크 및 수정
-        if (sbIndex < 0 || sbIndex >= turnOrder.Count)
+        // 🆕 buttonIndex 유효성 체크
+        if (buttonIndex < 0 || buttonIndex >= turnOrder.Count)
         {
-            Debug.LogWarning($"[PostBlinds] ⚠️ sbIndex({sbIndex})가 범위를 벗어남. 재계산합니다.");
-            sbIndex = NextSeatWithPlayerFrom(buttonIndex);
+            Debug.LogWarning($"[PostBlinds] ⚠️ buttonIndex({buttonIndex})가 범위를 벗어남. 0으로 재설정합니다.");
+            buttonIndex = 0;
         }
 
-        if (bbIndex < 0 || bbIndex >= turnOrder.Count)
-        {
-            Debug.LogWarning($"[PostBlinds] ⚠️ bbIndex({bbIndex})가 범위를 벗어남. 재계산합니다.");
-            bbIndex = NextSeatWithPlayerFrom(sbIndex);
-        }
+        // 인덱스 유효성 체크 및 수정 (modulo 연산 사용)
+        sbIndex = (buttonIndex + 1) % turnOrder.Count;
+        bbIndex = (buttonIndex + 2) % turnOrder.Count;
+
+        Debug.Log($"[PostBlinds] 재계산됨 - buttonIndex: {buttonIndex}, sbIndex: {sbIndex}, bbIndex: {bbIndex}");
 
         // 최종 안전성 체크
-        if (sbIndex >= turnOrder.Count || bbIndex >= turnOrder.Count)
+        if (sbIndex < 0 || sbIndex >= turnOrder.Count || bbIndex < 0 || bbIndex >= turnOrder.Count)
         {
             Debug.LogError($"[PostBlinds] ❌ 인덱스 오류! sbIndex: {sbIndex}, bbIndex: {bbIndex}, turnOrder.Count: {turnOrder.Count}");
             return;
@@ -840,6 +985,10 @@ public class GamaManager : MonoBehaviour
         if (winners == null) winners = new List<Player>();
 
         ShowWinnersUI(winners, board5, suffix: "\n" + potsSummary);
+
+        // 🆕 아웃된 플레이어 처리 추가
+        ProcessEliminatedPlayers();
+
         StartCoroutine(Co_NextHandAfterDelay(nextHandDelay));
     }
 
@@ -859,6 +1008,9 @@ public class GamaManager : MonoBehaviour
         {
             ShowWinnersUI(new List<Player>(), null, suffix: "");
         }
+
+        // 🆕 아웃된 플레이어 처리 추가
+        ProcessEliminatedPlayers();
 
         StartCoroutine(Co_NextHandAfterDelay(nextHandDelay));
     }
