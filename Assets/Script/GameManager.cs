@@ -7,7 +7,7 @@ using UnityEngine.UI;
 public enum Street { Preflop, Flop, Turn, River, Showdown }
 public enum ActionType { Fold, Check, Call, Bet, Raise, AllIn }
 
-public class GamaManager : MonoBehaviour
+public class GameManager : MonoBehaviour
 {
     [Header("Blinds / Pots")]
     public int smallBlind;
@@ -62,6 +62,7 @@ public class GamaManager : MonoBehaviour
 
         yield return null;
 
+
         BuildSeatOrder();
         BuildTurnOrderBySeats();
 
@@ -104,7 +105,168 @@ public class GamaManager : MonoBehaviour
             emptySeat.isSeated = true;
         }
     }
+    public void AddNewAIPlayerToEmptySeat(AIPersonality personality = AIPersonality.Normal)
+    {
+        Seat emptySeat = FindEmptySeat();
 
+        if (emptySeat == null)
+        {
+            Debug.Log("💺 빈 좌석이 없습니다!");
+            return;
+        }
+
+        GameObject newPlayerObj = CreateNewPlayer(emptySeat);
+
+        if (newPlayerObj != null)
+        {
+            Player newPlayer = newPlayerObj.GetComponent<Player>();
+            AIPlayer aiComponent = newPlayerObj.AddComponent<AIPlayer>();
+            aiComponent.personality = personality;
+
+            Debug.Log($"🤖 AI 플레이어가 {emptySeat.name}에 추가되었습니다!");
+            Debug.Log($"   - 성격: {personality}");
+            Debug.Log($"   - 초기 칩: {newPlayer.playerChip:N0}");
+        }
+    }
+
+    public void AddMultipleAIPlayers(int count, AIPersonality personality = AIPersonality.Normal)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            Seat emptySeat = FindEmptySeat();
+            if (emptySeat == null)
+            {
+                Debug.LogWarning($"💺 {i}명의 AI 플레이어만 추가되었습니다. (빈 좌석 부족)");
+                break;
+            }
+
+            GameObject newPlayerObj = CreateNewPlayer(emptySeat);
+            if (newPlayerObj != null)
+            {
+                AIPlayer aiComponent = newPlayerObj.AddComponent<AIPlayer>();
+                aiComponent.personality = personality;
+                emptySeat.isSeated = true;
+            }
+        }
+
+        Debug.Log($"🤖 {count}명의 AI 플레이어가 추가되었습니다!");
+    }
+
+    public void AddMixedAIPlayers()
+    {
+        AIPersonality[] personalities = new AIPersonality[]
+        {
+            AIPersonality.Tight,
+            AIPersonality.Normal,
+            AIPersonality.Aggressive,
+            AIPersonality.Loose
+        };
+
+        foreach (var personality in personalities)
+        {
+            Seat emptySeat = FindEmptySeat();
+            if (emptySeat == null) break;
+
+            GameObject newPlayerObj = CreateNewPlayer(emptySeat);
+            if (newPlayerObj != null)
+            {
+                AIPlayer aiComponent = newPlayerObj.AddComponent<AIPlayer>();
+                aiComponent.personality = personality;
+                emptySeat.isSeated = true;
+            }
+        }
+
+        Debug.Log("🤖 다양한 성격의 AI 플레이어들이 추가되었습니다!");
+    }
+
+    public void AddAIPlayerToSpecificSeat(int seatIndex, AIPersonality personality = AIPersonality.Normal)
+    {
+        if (seatIndex < 0 || seatIndex >= seatOrder.Count)
+        {
+            Debug.LogError($"❌ 잘못된 좌석 인덱스: {seatIndex}");
+            return;
+        }
+
+        Seat targetSeat = seatOrder[seatIndex];
+        if (targetSeat == null)
+        {
+            Debug.LogError($"❌ 좌석 {seatIndex}을 찾을 수 없습니다!");
+            return;
+        }
+
+        if (GetPlayerAtSeat(targetSeat) != null)
+        {
+            Debug.LogWarning($"⚠️ 좌석 {seatIndex}에는 이미 플레이어가 있습니다!");
+            return;
+        }
+
+        GameObject newPlayerObj = CreateNewPlayer(targetSeat);
+        if (newPlayerObj != null)
+        {
+            AIPlayer aiComponent = newPlayerObj.AddComponent<AIPlayer>();
+            aiComponent.personality = personality;
+            targetSeat.isSeated = true;
+
+            Debug.Log($"🤖 AI 플레이어가 좌석 {seatIndex}에 추가되었습니다! (성격: {personality})");
+        }
+    }
+
+    public void ChangeAIPersonality(Player targetPlayer, AIPersonality newPersonality)
+    {
+        AIPlayer aiComponent = targetPlayer.GetComponent<AIPlayer>();
+        if (aiComponent == null)
+        {
+            Debug.LogError($"❌ {targetPlayer.name}은 AI 플레이어가 아닙니다!");
+            return;
+        }
+
+        aiComponent.personality = newPersonality;
+        Debug.Log($"🎭 {targetPlayer.name}의 성격이 {newPersonality}로 변경되었습니다!");
+    }
+
+    public void SetAIActionDelay(Player targetPlayer, float delay)
+    {
+        AIPlayer aiComponent = targetPlayer.GetComponent<AIPlayer>();
+        if (aiComponent == null)
+        {
+            Debug.LogError($"❌ {targetPlayer.name}은 AI 플레이어가 아닙니다!");
+            return;
+        }
+
+        aiComponent.actionDelay = delay;
+        Debug.Log($"⏱️ {targetPlayer.name}의 액션 속도가 {delay}초로 변경되었습니다!");
+    }
+
+    public void PrintAllAIPlayers()
+    {
+        Debug.Log("═══════════════════════════════════════");
+        Debug.Log("         현재 게임의 AI 플레이어 목록");
+        Debug.Log("═══════════════════════════════════════");
+
+        int aiCount = 0;
+        foreach (var player in turnOrder)
+        {
+            AIPlayer ai = player.GetComponent<AIPlayer>();
+            if (ai != null)
+            {
+                aiCount++;
+                Debug.Log($"🤖 [{aiCount}] {player.name}");
+                Debug.Log($"    - 성격: {ai.personality}");
+                Debug.Log($"    - 칩: {player.playerChip:N0}");
+                Debug.Log($"    - 액션 속도: {ai.actionDelay}초");
+                Debug.Log($"    - 폴드/콜/레이즈: {ai.foldWeight:F2} / {ai.callWeight:F2} / {ai.raiseWeight:F2}");
+            }
+        }
+
+        if (aiCount == 0)
+        {
+            Debug.Log("❌ AI 플레이어가 없습니다!");
+        }
+        else
+        {
+            Debug.Log("═══════════════════════════════════════");
+        }
+    }
     // 빈 좌석 찾기
     private Seat FindEmptySeat()
     {

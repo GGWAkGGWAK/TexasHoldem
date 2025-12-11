@@ -5,11 +5,11 @@ using UnityEngine.UI;
 
 public class BettingUI : MonoBehaviour
 {
-    private GamaManager gm;
+    private GameManager gm;
 
     private void Awake()
     {
-        gm = GameObject.FindGameObjectWithTag("GameManager").GetComponent<GamaManager>();
+        gm = GameObject.FindGameObjectWithTag("GameManager").GetComponent<GameManager>();
         var canvas = GameObject.Find("Canvas").transform;
 
         var foldBtn = canvas.Find("Æúµå").GetComponent<UnityEngine.UI.Button>();

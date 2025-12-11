@@ -16,7 +16,7 @@ public class Player : MonoBehaviour
     private bool isAdjustingRaise = false;
     private int raiseStep = 10000;
 
-    [SerializeField] private GamaManager gm;
+    [SerializeField] private GameManager gm;
     [SerializeField] private Deck deck;
     [SerializeField] private Slider raiseSlider;
     [SerializeField] private Text raiseValueText;
@@ -24,7 +24,7 @@ public class Player : MonoBehaviour
 
     private void Awake()
     {
-        gm = GameObject.Find("GameManager").GetComponent<GamaManager>();
+        gm = GameObject.Find("GameManager").GetComponent<GameManager>();
         deck = GameObject.Find("Deck").GetComponent<Deck>();
 
         Transform canvas = GameObject.Find("Canvas").transform;
