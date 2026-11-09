@@ -1,0 +1,9 @@
+{
+    "name": "TexasHoldem.PlayModeTests",
+    "references": [
+        "UnityEngine.UI"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

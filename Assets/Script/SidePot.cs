@@ -6,6 +6,7 @@ public class Pot
 {
     public int amount;                    // 이 팟의 총 금액
     public HashSet<Player> eligible;      // 이 팟을 딸 수 있는 플레이어(폴드 제외)
+    public Player uncalledTo;
 }
 
 public static class SidePot
@@ -15,7 +16,7 @@ public static class SidePot
     /// - 금액 합산에는 폴드 플레이어도 포함 (이미 낸 돈은 팟에 남음)
     /// - 당첨 자격(eligible)은 canPlay==true 인 플레이어만
     /// </summary>
-    public static List<Pot> BuildPots(List<Player> allPlayers)
+    public static List<Pot> BuildPots(List<Player> allPlayers, Player caller = null, int callCost = 0)
     {
         // 기여액 맵
         var contrib = new Dictionary<Player, int>();
@@ -23,6 +24,7 @@ public static class SidePot
         {
             if (p == null) continue;
             int c = Mathf.Max(0, p.contributedThisHand);
+            if (p == caller) c += callCost;
             if (c > 0) contrib[p] = c;
         }
         if (contrib.Count == 0) return new List<Pot>();
@@ -49,7 +51,15 @@ public static class SidePot
                 participantsForMoney.Where(p => p.canPlay)
             );
 
-            pots.Add(new Pot { amount = potAmount, eligible = eligible });
+            Player uncalledTo = countMoney == 1 ? participantsForMoney[0] : null;
+            var previous = pots.LastOrDefault();
+            if (uncalledTo == null && previous != null && previous.uncalledTo == null
+                && previous.eligible.SetEquals(eligible))
+                previous.amount += potAmount;
+            else
+            {
+                pots.Add(new Pot { amount = potAmount, eligible = eligible, uncalledTo = uncalledTo });
+            }
 
             prev = level;
         }
@@ -60,9 +70,11 @@ public static class SidePot
     /// <summary>
     /// 각 팟별로 승자를 뽑아 분배한다. (스플릿 시 균등 분배, 나머지는 첫 승자에게)
     /// </summary>
-    public static string DistributeAllPots(List<Pot> pots, List<CardData> board5)
+    public static string DistributeAllPots(List<Pot> pots, List<CardData> board5, out List<Player> paidWinners)
     {
+        paidWinners = new List<Player>();
         int totalPaid = 0;
+        int potNumber = 0;
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
 
         for (int i = 0; i < pots.Count; i++)
@@ -70,6 +82,16 @@ public static class SidePot
             var pot = pots[i];
             if (pot.amount <= 0) continue;
 
+            if (pot.uncalledTo != null)
+            {
+                pot.uncalledTo.playerChip += pot.amount;
+                totalPaid += pot.amount;
+                sb.AppendLine($"Uncalled: {pot.uncalledTo.name} +{pot.amount:N0}");
+                continue;
+            }
+
+            string label = potNumber == 0 ? "Main pot" : $"Side pot {potNumber}";
+            potNumber++;
             var eligibles = pot.eligible?.Where(p => p != null && p.canPlay).ToList() ?? new List<Player>();
             if (eligibles.Count == 0)
             {
@@ -90,19 +112,21 @@ public static class SidePot
             int share = pot.amount / winners.Count;
             int rem = pot.amount % winners.Count;
 
-            foreach (var w in winners)
+            var payouts = new List<string>();
+            for (int winnerIndex = 0; winnerIndex < winners.Count; winnerIndex++)
             {
-                w.playerChip += share;
+                var winner = winners[winnerIndex];
+                int payout = share + (winnerIndex == 0 ? rem : 0);
+                if (payout == 0) continue;
+
+                winner.playerChip += payout;
+                if (!paidWinners.Contains(winner))
+                    paidWinners.Add(winner);
+                payouts.Add($"{winner.name} +{payout:N0}");
             }
 
-            // 남는 1~(n-1)칩은 첫 승자에게
-            winners[0].playerChip += rem;
-
             totalPaid += pot.amount;
-
-            // 문자열 요약
-            sb.AppendLine($"[Pot {i}] {string.Join(", ", winners.Select(w => w.name))} " +
-                          $"won {share + (rem > 0 ? rem : 0):N0} each ({pot.amount:N0} total)");
+            sb.AppendLine($"[{label}] {string.Join(", ", payouts)} ({pot.amount:N0} total)");
         }
 
         sb.AppendLine($"Total paid out: {totalPaid:N0}");

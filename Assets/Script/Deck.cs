@@ -22,7 +22,6 @@ public class Deck : MonoBehaviour
 
     void Start()
     {
-        InitializeDeck();
         ShuffleDeck();
     }
 
@@ -34,12 +33,30 @@ public class Deck : MonoBehaviour
 
     public void ShuffleDeck()
     {
+        var gm = FindObjectOfType<GameManager>();
+        if (gm != null && !gm.CanStartHand) return;
+
+        PrepareForHand();
+    }
+
+    internal bool CanDealHand(int playerCount)
+    {
+        const int boardAndBurnCards = 8;
+        return originalDeck.Count >= playerCount * 2 + boardAndBurnCards
+            && originalDeck.TrueForAll(card => card != null);
+    }
+
+    internal void PrepareForHand()
+    {
         InitializeDeck();
 
         // 씬에 남아있는 카드 삭제
         Card[] allCardsInScene = FindObjectsOfType<Card>();
-        for (int i = 0; i < allCardsInScene.Length; i++)
-            Destroy(allCardsInScene[i].gameObject);
+        foreach (var card in allCardsInScene)
+        {
+            card.gameObject.SetActive(false);
+            Destroy(card.gameObject);
+        }
 
         // Fisher–Yates
         for (int i = 0; i < deck.Count; i++)
@@ -67,7 +84,7 @@ public class Deck : MonoBehaviour
         for (int i = 0; i < order.Count; i++)
         {
             var seat = order[i];
-            if (seat == null || !seat.isSeated) continue;
+            if (seat == null) continue;
 
             var player = seat.GetComponentInChildren<Player>(true);
             Transform parent = (player != null) ? player.transform : seat.transform;
@@ -84,7 +101,7 @@ public class Deck : MonoBehaviour
         for (int i = 0; i < order.Count; i++)
         {
             var seat = order[i];
-            if (seat == null || !seat.isSeated) continue;
+            if (seat == null) continue;
 
             var player = seat.GetComponentInChildren<Player>(true);
             Transform parent = (player != null) ? player.transform : seat.transform;

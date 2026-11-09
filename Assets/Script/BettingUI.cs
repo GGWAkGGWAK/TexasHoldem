@@ -1,75 +1,61 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class BettingUI : MonoBehaviour
 {
     private GameManager gm;
+    private Button[] bettingButtons;
+    private Button startButton;
+    private Button resetButton;
 
     private void Awake()
     {
         gm = GameObject.FindGameObjectWithTag("GameManager").GetComponent<GameManager>();
         var canvas = GameObject.Find("Canvas").transform;
 
-        var foldBtn = canvas.Find("∆˙µÂ").GetComponent<UnityEngine.UI.Button>();
-        var checkBtn = canvas.Find("√º≈©").GetComponent<UnityEngine.UI.Button>();
-        var callBtn = canvas.Find("ƒ›").GetComponent<UnityEngine.UI.Button>();
-        var raiseBtn = canvas.Find("∑π¿Ã¡Ó").GetComponent<UnityEngine.UI.Button>();
-        var allinBtn = canvas.Find("ø√¿Œ").GetComponent<UnityEngine.UI.Button>();
+        var foldButton = canvas.Find("Ìè¥Îìú").GetComponent<Button>();
+        var checkButton = canvas.Find("Ï≤¥ÌÅ¨").GetComponent<Button>();
+        var callButton = canvas.Find("ÏΩú").GetComponent<Button>();
+        var raiseButton = canvas.Find("Î†àÏù¥Ï¶à").GetComponent<Button>();
+        var allInButton = canvas.Find("Ïò¨Ïù∏").GetComponent<Button>();
+        bettingButtons = new[] { foldButton, checkButton, callButton, raiseButton, allInButton };
+        startButton = canvas.Find("Ïä§ÌÉÄÌä∏")?.GetComponent<Button>();
+        resetButton = canvas.Find("Ï¥àÍ∏∞Ìôî")?.GetComponent<Button>();
 
-        foldBtn.onClick.RemoveAllListeners();
-        checkBtn.onClick.RemoveAllListeners();
-        callBtn.onClick.RemoveAllListeners();
-        raiseBtn.onClick.RemoveAllListeners();
-        allinBtn.onClick.RemoveAllListeners();
+        foreach (var button in bettingButtons)
+            button.onClick.RemoveAllListeners();
 
-        foldBtn.onClick.AddListener(OnClickFold);
-        checkBtn.onClick.AddListener(OnClickCheck);
-        callBtn.onClick.AddListener(OnClickCall);
-        raiseBtn.onClick.AddListener(OnClickRaise);
-        allinBtn.onClick.AddListener(OnClickAllin);
+        foldButton.onClick.AddListener(OnClickFold);
+        checkButton.onClick.AddListener(OnClickCheck);
+        callButton.onClick.AddListener(OnClickCall);
+        raiseButton.onClick.AddListener(OnClickRaise);
+        allInButton.onClick.AddListener(OnClickAllin);
     }
 
-    private Player CurrentPlayer()
+    private void Update()
     {
-        if (gm.turnOrder.Count == 0 || gm.currentIndex < 0) return null;
-        return gm.turnOrder[gm.currentIndex];
+        bool canAct = CurrentHumanPlayer() != null;
+        foreach (var button in bettingButtons)
+            button.interactable = canAct;
+
+        if (startButton != null) startButton.interactable = gm.CanStartHand;
+        if (resetButton != null) resetButton.interactable = gm.CanStartHand;
     }
 
-    public void OnClickFold()
+    private Player CurrentHumanPlayer()
     {
-        var p = CurrentPlayer();
-        if (p == null || !p.isMyTurn) return;   // ∞°µÂ
-        p.Fold();
+        if (gm.currentIndex < 0 || gm.currentIndex >= gm.turnOrder.Count) return null;
+
+        var player = gm.turnOrder[gm.currentIndex];
+        if (player == null || !player.isMyTurn) return null;
+
+        var ai = player.GetComponent<AIPlayer>();
+        return ai != null && ai.isActiveAndEnabled ? null : player;
     }
 
-    public void OnClickCheck()
-    {
-        var p = CurrentPlayer();
-        if (p == null || !p.isMyTurn) return;
-        p.Check();
-    }
-
-    public void OnClickCall()
-    {
-        var p = CurrentPlayer();
-        if (p == null || !p.isMyTurn) return;
-        p.Call();
-    }
-
-    public void OnClickRaise()
-    {
-        var p = CurrentPlayer();
-        if (p == null || !p.isMyTurn) return;
-        // «√∑π¿ÃæÓ ≥ª∫Œø° ΩΩ∂Û¿Ã¥ı ≈‰±€/Ω««‡ ∑Œ¡˜¿Ã ¿÷¿∏π«∑Œ ±◊¥Î∑Œ ¿ß¿”
-        p.OnRaiseButtonClicked();
-    }
-
-    public void OnClickAllin()
-    {
-        var p = CurrentPlayer();
-        if (p == null || !p.isMyTurn) return;
-        p.Allin();
-    }
+    public void OnClickFold() => CurrentHumanPlayer()?.Fold();
+    public void OnClickCheck() => CurrentHumanPlayer()?.Check();
+    public void OnClickCall() => CurrentHumanPlayer()?.Call();
+    public void OnClickRaise() => CurrentHumanPlayer()?.OnRaiseButtonClicked();
+    public void OnClickAllin() => CurrentHumanPlayer()?.Allin();
 }

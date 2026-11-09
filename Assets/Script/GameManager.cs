@@ -9,6 +9,8 @@ public enum ActionType { Fold, Check, Call, Bet, Raise, AllIn }
 
 public class GameManager : MonoBehaviour
 {
+    private enum HandState { Waiting, Playing, BetweenHands }
+
     [Header("Blinds / Pots")]
     public int smallBlind;
     public int bigBlind;
@@ -37,11 +39,12 @@ public class GameManager : MonoBehaviour
     public GameObject playerPrefab;
 
     [Header("Flow")]
-    private int lastAggressorIndex = -1;
-    private int actorsToAct = 0;
+    private readonly Dictionary<Player, int> actedAtBet = new Dictionary<Player, int>();
+    private HandState handState;
     public float nextHandDelay = 3f;
 
     private DealerButton dealerButton;
+    public bool CanStartHand => handState == HandState.Waiting;
 
     private IEnumerator Start()
     {
@@ -61,7 +64,7 @@ public class GameManager : MonoBehaviour
         duration = 180;
 
         yield return null;
-
+        if (!CanStartHand) yield break;
 
         BuildSeatOrder();
         BuildTurnOrderBySeats();
@@ -254,7 +257,6 @@ public class GameManager : MonoBehaviour
                 Debug.Log($"    - 성격: {ai.personality}");
                 Debug.Log($"    - 칩: {player.playerChip:N0}");
                 Debug.Log($"    - 액션 속도: {ai.actionDelay}초");
-                Debug.Log($"    - 폴드/콜/레이즈: {ai.foldWeight:F2} / {ai.callWeight:F2} / {ai.raiseWeight:F2}");
             }
         }
 
@@ -446,44 +448,16 @@ public class GameManager : MonoBehaviour
     // ========== 버튼 이동 ==========
     private void AdvanceButtonToNextPlayer()
     {
-        if (turnOrder.Count <= 1) return;
-
-        // 현재 버튼 플레이어 찾기
-        var currentButtonPlayer = GetPlayerAtSeat(seatOrder[buttonIndex]);
-
-        if (currentButtonPlayer == null)
+        for (int offset = 1; offset <= seatOrder.Count; offset++)
         {
-            // 첫 번째 활성 플레이어를 버튼으로 설정
-            buttonIndex = FindFirstActivePlayerSeat();
-        }
-        else
-        {
-            // turnOrder에서 다음 플레이어 찾기
-            int currentTurnIndex = turnOrder.IndexOf(currentButtonPlayer);
-            int nextTurnIndex = (currentTurnIndex + 1) % turnOrder.Count;
-            var nextButtonPlayer = turnOrder[nextTurnIndex];
-
-            // 다음 플레이어의 좌석 인덱스 찾기
-            bool foundSeat = false;
-            for (int i = 0; i < seatOrder.Count; i++)
+            int next = (buttonIndex + offset) % seatOrder.Count;
+            var player = GetPlayerAtSeat(seatOrder[next]);
+            if (player != null && player.playerChip > 0)
             {
-                if (GetPlayerAtSeat(seatOrder[i]) == nextButtonPlayer)
-                {
-                    buttonIndex = i;
-                    foundSeat = true;
-                    break;
-                }
+                buttonIndex = next;
+                return;
             }
-
-            if (!foundSeat) buttonIndex = FindFirstActivePlayerSeat();
         }
-
-        // SB/BB 설정 (게임 진행용 메서드 사용 - canPlay 체크함)
-        sbIndex = NextSeatWithPlayerFrom(buttonIndex);
-        if (sbIndex < 0) return;
-
-        bbIndex = NextSeatWithPlayerFrom(sbIndex);
-        if (bbIndex < 0) return;
     }
 
     private int FindFirstActivePlayerSeat()
@@ -526,7 +500,7 @@ public class GameManager : MonoBehaviour
     {
         if (dealerButton == null) return;
 
-        var player = (buttonIndex >= 0 && buttonIndex < turnOrder.Count) ? turnOrder[buttonIndex] : null;
+        var player = (buttonIndex >= 0 && buttonIndex < seatOrder.Count) ? GetPlayerAtSeat(seatOrder[buttonIndex]) : null;
         if (player != null && player.gameObject != null)
         {
             dealerButton.TeleportTo(player.transform);
@@ -536,71 +510,19 @@ public class GameManager : MonoBehaviour
     {
         if (dealerButton == null) return;
 
-        // buttonIndex를 turnOrder 기준으로 변환
-        var player = (buttonIndex >= 0 && buttonIndex < turnOrder.Count) ? turnOrder[buttonIndex] : null;
+        var player = (buttonIndex >= 0 && buttonIndex < seatOrder.Count) ? GetPlayerAtSeat(seatOrder[buttonIndex]) : null;
         if (player != null && player.gameObject != null)
         {
             dealerButton.MoveTo(player.transform);
         }
     }
-    // 다음 핸드로 진행하기 전 버튼 이동
-    private void MoveButtonToNextPlayer()
-    {
-        if (turnOrder.Count < 2)
-        {
-            Debug.LogError("❌ 버튼 이동 불가: 플레이어가 2명 미만입니다!");
-            return;
-        }
-
-        // 버튼을 한 자리만 이동
-        buttonIndex = (buttonIndex + 1) % turnOrder.Count;
-
-        // 다음 플레이어가 활성(칩 > 0)인지 확인
-        if (turnOrder[buttonIndex].playerChip > 0)
-        {
-            Debug.Log($"[MoveButtonToNextPlayer] 버튼 이동 → turnOrder Index: {buttonIndex}");
-        }
-        else
-        {
-            // 탈락한 플레이어면 다음을 찾음
-            buttonIndex = FindNextActivePlayerIndex(buttonIndex);
-            Debug.Log($"[MoveButtonToNextPlayer] 탈락자 건너뛰고 → turnOrder Index: {buttonIndex}");
-        }
-    }
-    // 다음 활성 플레이어 찾기
-    private int FindNextActivePlayerIndex(int startIndex)
-    {
-        int searchIndex = (startIndex + 1) % turnOrder.Count;
-
-        // 한 번만 체크
-        if (turnOrder[searchIndex] != null && turnOrder[searchIndex].playerChip > 0)
-        {
-            return searchIndex;
-        }
-
-        // 그 다음도 없으면 처음부터 찾기
-        for (int i = 0; i < turnOrder.Count; i++)
-        {
-            if (turnOrder[i] != null && turnOrder[i].playerChip > 0)
-            {
-                return i;
-            }
-        }
-
-        Debug.LogError("❌ 활성 플레이어를 찾을 수 없습니다!");
-        return 0;
-    }
     // ========== 새 핸드 ==========
     public void BeginNewHand()
     {
-        HideWinnersUI();
+        if (!CanStartHand) return;
 
         var deck = FindObjectOfType<Deck>();
         if (deck == null) return;
-
-        pots = 0;
-        beforeBettingChip = 0;
-        currentStreet = Street.Preflop;
 
         // 새로 추가된 플레이어들 포함하여 좌석/턴 순서 재스캔
         BuildSeatOrder();
@@ -616,20 +538,6 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // buttonIndex를 turnOrder 기준으로 조정
-        if (buttonIndex < 0 || buttonIndex >= turnOrder.Count)
-        {
-            buttonIndex = 0;
-        }
-
-        // Modulo 연산으로 SB, BB 인덱스 계산 (안전함)
-        sbIndex = (buttonIndex + 1) % turnOrder.Count;
-        bbIndex = (buttonIndex + 2) % turnOrder.Count;
-
-        Debug.Log($"[BeginNewHand] buttonIndex: {buttonIndex}, sbIndex: {sbIndex}, bbIndex: {bbIndex}, turnOrder.Count: {turnOrder.Count}");
-
-        TeleportDealerButton();
-
         // 플레이어 상태 초기화 및 게임 종료 조건 체크
         int playersWithChips = 0;
         Player winner = null;
@@ -644,6 +552,7 @@ public class GameManager : MonoBehaviour
             p.canPlay = (p.playerChip > 0);
             p.isAllIn = false;
             p.contributedThisHand = 0;
+            p.contributedThisRound = 0;
 
             Debug.Log($"[BeginNewHand] {p.name}: chips={p.playerChip}, canPlay={oldCanPlay}→{p.canPlay}");
 
@@ -660,24 +569,34 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[BeginNewHand] 🏆 게임 종료! 최종 승자: {winner?.name ?? "없음"}");
             if (winner != null)
             {
-                ShowWinnersUI(new List<Player> { winner }, null,
+                ShowWinnersUI(new List<Player> { winner },
                     suffix: $"\n🎉 TOURNAMENT CHAMPION! 🎉\n총 상금: {winner.playerChip:N0}");
             }
             return;
         }
 
-        deck.ShuffleDeck();
-        PostBlinds(); // 이제 안전하게 호출
-
         var order = BuildPreflopDealingOrder();
-        Debug.Log($"[BeginNewHand] 카드 배분 대상: {order?.Count ?? 0}명");
-
-        if (order == null || order.Count < 2)
+        if (order.Count != playersWithChips || !deck.CanDealHand(order.Count))
         {
-            Debug.LogError($"[BeginNewHand] ❌ 카드 배분 대상이 부족합니다! ({order?.Count ?? 0}명)");
+            Debug.LogError("[BeginNewHand] 좌석이나 덱이 준비되지 않았습니다.");
             return;
         }
 
+        handState = HandState.Playing;
+        HideWinnersUI();
+        pots = 0;
+        beforeBettingChip = 0;
+        currentStreet = Street.Preflop;
+        buttonIndex = Mathf.Clamp(buttonIndex, 0, seatOrder.Count - 1);
+        if (playersWithChips == 2 && !IsActiveSeat(buttonIndex))
+            buttonIndex = NextSeatWithPlayerFrom(buttonIndex);
+
+        sbIndex = playersWithChips == 2 ? buttonIndex : NextSeatWithPlayerFrom(buttonIndex);
+        bbIndex = NextSeatWithPlayerFrom(sbIndex);
+        TeleportDealerButton();
+
+        deck.PrepareForHand();
+        PostBlinds();
         deck.PreflopDealInOrder(order);
 
         int utgSeatIdx = FirstToActPreflopSeatIndex();
@@ -693,7 +612,7 @@ public class GameManager : MonoBehaviour
         for (int i = 0; i < turnOrder.Count; i++)
         {
             var player = turnOrder[i];
-            if (player != null && player.playerChip > 0)
+            if (player != null && player.canPlay)
             {
                 // 해당 플레이어의 좌석 찾기
                 for (int seatIdx = 0; seatIdx < seatOrder.Count; seatIdx++)
@@ -711,157 +630,83 @@ public class GameManager : MonoBehaviour
 
     private void PostBlinds()
     {
-        // 디버그: 현재 상태 확인
-        Debug.Log($"[PostBlinds] turnOrder.Count: {turnOrder?.Count ?? 0}, sbIndex: {sbIndex}, bbIndex: {bbIndex}");
-
-        // 안전성 체크
-        if (turnOrder == null || turnOrder.Count == 0)
-        {
-            Debug.LogError("[PostBlinds] ❌ turnOrder가 비어있습니다!");
-            return;
-        }
-
-        if (turnOrder.Count < 2)
-        {
-            Debug.LogError($"[PostBlinds] ❌ 플레이어가 부족합니다! ({turnOrder.Count}명)");
-            return;
-        }
-
-        // 🆕 buttonIndex 유효성 체크
-        if (buttonIndex < 0 || buttonIndex >= turnOrder.Count)
-        {
-            Debug.LogWarning($"[PostBlinds] ⚠️ buttonIndex({buttonIndex})가 범위를 벗어남. 0으로 재설정합니다.");
-            buttonIndex = 0;
-        }
-
-        // 인덱스 유효성 체크 및 수정 (modulo 연산 사용)
-        sbIndex = (buttonIndex + 1) % turnOrder.Count;
-        bbIndex = (buttonIndex + 2) % turnOrder.Count;
-
-        Debug.Log($"[PostBlinds] 재계산됨 - buttonIndex: {buttonIndex}, sbIndex: {sbIndex}, bbIndex: {bbIndex}");
-
-        // 최종 안전성 체크
-        if (sbIndex < 0 || sbIndex >= turnOrder.Count || bbIndex < 0 || bbIndex >= turnOrder.Count)
-        {
-            Debug.LogError($"[PostBlinds] ❌ 인덱스 오류! sbIndex: {sbIndex}, bbIndex: {bbIndex}, turnOrder.Count: {turnOrder.Count}");
-            return;
-        }
-
-        // 블라인드 처리
-        var sbPlayer = turnOrder[sbIndex];
-        var bbPlayer = turnOrder[bbIndex];
-
-        if (sbPlayer == null || bbPlayer == null)
-        {
-            Debug.LogError("[PostBlinds] ❌ SB 또는 BB 플레이어가 null입니다!");
-            return;
-        }
-
-        // 실제 블라인드 베팅 처리
-        int actualSB = Mathf.Min(smallBlind, sbPlayer.playerChip);
-        int actualBB = Mathf.Min(bigBlind, bbPlayer.playerChip);
-
-        sbPlayer.playerChip -= actualSB;
-        sbPlayer.contributedThisHand = actualSB;
-        sbPlayer.contributedThisRound = actualSB;
-
-        bbPlayer.playerChip -= actualBB;
-        bbPlayer.contributedThisHand = actualBB;
-        bbPlayer.contributedThisRound = actualBB;
-
-        pots += actualSB + actualBB;
-
-        beforeBettingChip = actualBB;
-
-        Debug.Log($"[PostBlinds] SB: {sbPlayer.name}({actualSB:N0}), BB: {bbPlayer.name}({actualBB:N0})");
-        Debug.Log($"[PostBlinds] beforeBettingChip 설정: {beforeBettingChip:N0}, 현재 팟: {pots:N0}");
+        PostBlind(GetPlayerAtSeat(seatOrder[sbIndex]), smallBlind);
+        PostBlind(GetPlayerAtSeat(seatOrder[bbIndex]), bigBlind);
+        beforeBettingChip = bigBlind;
     }
 
-    // ========== 액션 시작자 ==========
-    private int FirstToActPreflopSeatIndex()
+    private void PostBlind(Player player, int blind)
     {
-        int idx = bbIndex;
-        for (int i = 0; i < seatOrder.Count; i++)
-        {
-            idx = NextSeatWithPlayerFrom(idx);
-            var p = (idx >= 0) ? GetPlayerAtSeat(seatOrder[idx]) : null;
-            if (p != null && p.canPlay) return idx;
-        }
-        return bbIndex;
+        int posted = Mathf.Min(blind, player.playerChip);
+        player.playerChip -= posted;
+        player.contributedThisHand = posted;
+        player.contributedThisRound = posted;
+        player.isAllIn = player.playerChip == 0;
+        pots += posted;
     }
 
-    private int FirstToActPostflopSeatIndex()
+    private bool IsActiveSeat(int index)
     {
-        if (seatOrder.Count == 0) return -1;
-
-        int currentSeat = buttonIndex;
-
-        for (int i = 0; i < seatOrder.Count; i++)
-        {
-            currentSeat = (currentSeat + 1) % seatOrder.Count;
-
-            if (currentSeat >= 0 && currentSeat < seatOrder.Count)
-            {
-                var seat = seatOrder[currentSeat];
-                var player = GetPlayerAtSeat(seat);
-
-                if (player != null && player.canPlay)
-                    return currentSeat;
-            }
-        }
-        return buttonIndex;
+        var player = GetPlayerAtSeat(seatOrder[index]);
+        return player != null && player.canPlay && player.playerChip > 0;
     }
 
-    // ========== 베팅 라운드 ==========
+    public bool IsInPosition(Player player)
+    {
+        for (int offset = 0; offset < seatOrder.Count; offset++)
+        {
+            int index = (buttonIndex - offset + seatOrder.Count) % seatOrder.Count;
+            if (IsActiveSeat(index))
+                return GetPlayerAtSeat(seatOrder[index]) == player;
+        }
+
+        return false;
+    }
+
+    private int FirstToActPreflopSeatIndex() => NextSeatWithPlayerFrom(bbIndex);
+
+    public int MinimumRaiseIncrement => Mathf.Max(bigBlind, beforeRaiseChip);
+    public int MinimumRaiseTo => beforeBettingChip + MinimumRaiseIncrement;
+    public Player BigBlindPlayer => bbIndex >= 0 && bbIndex < seatOrder.Count
+        ? GetPlayerAtSeat(seatOrder[bbIndex])
+        : null;
+
+    public int GetCallCost(Player player)
+    {
+        int target = beforeBettingChip;
+        if (PlayersWithChipsCount() == 1)
+        {
+            // A lone stack only needs to match the chips opponents actually posted.
+            target = 0;
+            foreach (var opponent in turnOrder)
+                if (opponent != null && opponent != player && opponent.canPlay)
+                    target = Mathf.Max(target, opponent.contributedThisRound);
+        }
+
+        return Mathf.Max(0, target - player.contributedThisRound);
+    }
+
+    public bool CanIncreaseBet(Player player)
+    {
+        return player.playerChip > GetCallCost(player)
+            && PlayersWithChipsCount() > 1
+            && (!actedAtBet.TryGetValue(player, out int lastBet)
+                || beforeBettingChip - lastBet >= MinimumRaiseIncrement);
+    }
+
     public void StartBettingRound(int firstTurnIndex)
     {
         if (currentStreet != Street.Preflop)
         {
             beforeBettingChip = 0;
+            foreach (var player in turnOrder)
+                if (player != null)
+                    player.contributedThisRound = 0;
         }
 
-        // 새 베팅 라운드 시작 시 모든 플레이어의 라운드별 기여금 초기화
-        foreach (var player in turnOrder)
-        {
-            if (player != null)
-                player.contributedThisRound = 0;
-        }
-
-        // 프리플랍인 경우만 블라인드 플레이어들의 라운드별 기여금 설정
-        if (currentStreet == Street.Preflop)
-        {
-            var sbPlayer = GetPlayerAtSeat(seatOrder[sbIndex]);
-            var bbPlayer = GetPlayerAtSeat(seatOrder[bbIndex]);
-
-            if (sbPlayer != null)
-                sbPlayer.contributedThisRound = smallBlind;
-
-            if (bbPlayer != null)
-                bbPlayer.contributedThisRound = bigBlind;
-        }
-
-        foreach (var p in turnOrder)
-            if (p != null) p.isMyTurn = false;
-
-        currentIndex = Mathf.Clamp(firstTurnIndex, 0, turnOrder.Count - 1);
-
-        if (turnOrder.Count > 0 && currentIndex >= 0 && currentIndex < turnOrder.Count)
-        {
-            var targetPlayer = turnOrder[currentIndex];
-            if (targetPlayer != null)
-            {
-                targetPlayer.isMyTurn = true;
-
-                for (int i = 0; i < turnOrder.Count; i++)
-                {
-                    if (i != currentIndex && turnOrder[i] != null)
-                        turnOrder[i].isMyTurn = false;
-                }
-            }
-        }
-
-        lastAggressorIndex = -1;
-        actorsToAct = ActivePlayersCount();
+        beforeRaiseChip = bigBlind;
+        actedAtBet.Clear();
+        ContinueBettingFrom(firstTurnIndex);
     }
 
     public int ActivePlayersCount()
@@ -886,93 +731,56 @@ public class GameManager : MonoBehaviour
         return cnt;
     }
 
-    public void RegisterAction(Player actor, ActionType action, bool isRaise, int raisedAmount = 0)
+    public void RegisterAction(Player actor)
     {
-        if (action == ActionType.Fold)
-            actorsToAct = Mathf.Max(actorsToAct - 1, 0);
-        else if (isRaise)
+        int increase = actor.contributedThisRound - beforeBettingChip;
+        if (increase > 0)
         {
-            lastAggressorIndex = turnOrder.IndexOf(actor);
-            actorsToAct = ActivePlayersCount() - 1;
-            beforeBettingChip = raisedAmount;
+            if (increase >= MinimumRaiseIncrement)
+                beforeRaiseChip = increase;
+            beforeBettingChip = actor.contributedThisRound;
         }
-        else
-            actorsToAct = Mathf.Max(actorsToAct - 1, 0);
 
-        if (ActivePlayersCount() <= 1)
+        actedAtBet[actor] = beforeBettingChip;
+        if (ActivePlayersCount() == 1)
         {
             WinByAllFold();
             return;
         }
 
-        int playersWithChips = PlayersWithChipsCount();
-
-        if (playersWithChips == 0)
-        {
-            actorsToAct = 0;
-        }
-
-        if (actorsToAct == 0)
-        {
-            AdvanceStreet();
-            return;
-        }
+        NextTurnFrom(actor);
     }
 
     public void NextTurnFrom(Player actor)
     {
-        if (turnOrder.Count == 0) return;
+        ContinueBettingFrom(turnOrder.IndexOf(actor) + 1);
+    }
 
-        int idx = turnOrder.IndexOf(actor);
-        if (idx < 0) idx = currentIndex;
+    private void ContinueBettingFrom(int firstIndex)
+    {
+        foreach (var player in turnOrder)
+            if (player != null)
+                player.isMyTurn = false;
 
-        actor.isMyTurn = false;
-
-        // 포스트플랍에서는 좌석 순서 강제 적용
-        if (currentStreet != Street.Preflop)
+        int playersWithChips = PlayersWithChipsCount();
+        for (int offset = 0; offset < turnOrder.Count; offset++)
         {
-            int currentSeatIdx = -1;
-            for (int i = 0; i < seatOrder.Count; i++)
-            {
-                if (GetPlayerAtSeat(seatOrder[i]) == actor)
-                {
-                    currentSeatIdx = i;
-                    break;
-                }
-            }
+            int index = (firstIndex + offset) % turnOrder.Count;
+            var player = turnOrder[index];
+            if (player == null || !player.canPlay || player.playerChip == 0)
+                continue;
 
-            if (currentSeatIdx >= 0)
+            bool owesChips = GetCallCost(player) > 0;
+            if (owesChips || (playersWithChips > 1 && !actedAtBet.ContainsKey(player)))
             {
-                for (int step = 1; step <= seatOrder.Count; step++)
-                {
-                    int nextSeatIdx = (currentSeatIdx + step) % seatOrder.Count;
-                    var nextPlayer = GetPlayerAtSeat(seatOrder[nextSeatIdx]);
-
-                    if (nextPlayer != null && nextPlayer.canPlay && nextPlayer.playerChip > 0)
-                    {
-                        int nextTurnIdx = turnOrder.IndexOf(nextPlayer);
-                        if (nextTurnIdx >= 0)
-                        {
-                            currentIndex = nextTurnIdx;
-                            nextPlayer.isMyTurn = true;
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-
-        for (int step = 1; step <= turnOrder.Count; step++)
-        {
-            int next = (idx + step) % turnOrder.Count;
-            var cand = turnOrder[next];
-            if (cand != null && cand.canPlay && cand.playerChip > 0)
-            {
-                currentIndex = next;
-                cand.isMyTurn = true;
+                currentIndex = index;
+                player.isMyTurn = true;
                 return;
             }
         }
+
+        currentIndex = -1;
+        AdvanceStreet();
     }
 
     public void HandleFoldAndPassTurn(Player actor)
@@ -1012,11 +820,7 @@ public class GameManager : MonoBehaviour
     {
         var deck = FindObjectOfType<Deck>();
 
-        int playersWithChips = PlayersWithChipsCount();
-
-        bool isAllInSituation = playersWithChips == 0;
-
-        if (isAllInSituation)
+        if (PlayersWithChipsCount() <= 1)
         {
             HandleAllInSituation(deck);
             return;
@@ -1082,71 +886,39 @@ public class GameManager : MonoBehaviour
 
     private void StartNextBettingRound()
     {
-        foreach (var p in turnOrder)
-            if (p != null) p.isMyTurn = false;
-
-        int firstIdx = TurnIndexFromSeatIndex(FirstToActPostflopSeatIndex());
+        int firstIdx = TurnIndexFromSeatIndex(NextSeatWithPlayerFrom(buttonIndex));
         StartBettingRound(firstIdx);
-
-        if (firstIdx >= 0 && firstIdx < turnOrder.Count)
-        {
-            var targetPlayer = turnOrder[firstIdx];
-            if (targetPlayer != null)
-            {
-                foreach (var p in turnOrder)
-                    if (p != null) p.isMyTurn = false;
-
-                targetPlayer.isMyTurn = true;
-                currentIndex = firstIdx;
-            }
-        }
-    }
-
-    private bool IsAllInSituation()
-    {
-        int playersWithChips = 0;
-        int totalActivePlayers = 0;
-
-        foreach (var player in turnOrder)
-        {
-            if (player != null && player.canPlay)
-            {
-                totalActivePlayers++;
-                if (player.playerChip > 0)
-                {
-                    playersWithChips++;
-                }
-            }
-        }
-
-        return totalActivePlayers >= 2 && playersWithChips <= 1;
     }
 
     // ========== 쇼다운/올폴드 ==========
     private void ResolveShowdown()
     {
+        if (handState != HandState.Playing) return;
+
         var deck = FindObjectOfType<Deck>();
         List<CardData> board5 = deck.GetBoardCardData();
+        handState = HandState.BetweenHands;
+        currentStreet = Street.Showdown;
+        currentIndex = -1;
 
-        if (board5 == null || board5.Count == 0) return;
-
-        var activePlayers = new List<Player>();
-        foreach (var p in turnOrder)
+        if (board5.Count != 5 || turnOrder.Any(p => p != null && p.canPlay
+            && p.GetComponentsInChildren<Card>().Length != 2))
         {
-            if (p != null && p.canPlay)
-                activePlayers.Add(p);
+            foreach (var player in turnOrder)
+                if (player != null)
+                    player.playerChip += player.contributedThisHand;
+
+            pots = 0;
+            Debug.LogError("[GameManager] 카드가 부족해 핸드를 무효 처리하고 칩을 반환했습니다.");
+            ShowWinnersUI(new List<Player>(), "\nHand voided. Chips returned.");
+            StartCoroutine(Co_NextHandAfterDelay(nextHandDelay));
+            return;
         }
 
-        if (activePlayers.Count == 0) return;
-
         var allPots = SidePot.BuildPots(turnOrder);
-        string potsSummary = SidePot.DistributeAllPots(allPots, board5);
-        this.pots = 0;
-
-        var winners = WinnerEvaluator.DecideWinners(activePlayers, board5);
-        if (winners == null) winners = new List<Player>();
-
-        ShowWinnersUI(winners, board5, suffix: "\n" + potsSummary);
+        string potsSummary = SidePot.DistributeAllPots(allPots, board5, out var winners);
+        pots = 0;
+        ShowWinnersUI(winners, "\n" + potsSummary);
 
         // 🆕 아웃된 플레이어 처리 추가
         ProcessEliminatedPlayers();
@@ -1156,6 +928,10 @@ public class GameManager : MonoBehaviour
 
     private void WinByAllFold()
     {
+        if (handState != HandState.Playing) return;
+
+        handState = HandState.BetweenHands;
+        currentIndex = -1;
         var alive = new List<Player>();
         foreach (var p in turnOrder)
             if (p != null && p.canPlay) alive.Add(p);
@@ -1164,11 +940,11 @@ public class GameManager : MonoBehaviour
         {
             alive[0].playerChip += pots;
             this.pots = 0;
-            ShowWinnersUI(new List<Player> { alive[0] }, null, suffix: " (All Fold)");
+            ShowWinnersUI(new List<Player> { alive[0] }, " (All Fold)");
         }
         else
         {
-            ShowWinnersUI(new List<Player>(), null, suffix: "");
+            ShowWinnersUI(new List<Player>(), "");
         }
 
         // 🆕 아웃된 플레이어 처리 추가
@@ -1188,37 +964,17 @@ public class GameManager : MonoBehaviour
         HideWinnersUI();
 
         yield return new WaitForSeconds(0.5f);
+        handState = HandState.Waiting;
         BeginNewHand();
     }
 
     // ========== WinnerText ==========
-    private void ShowWinnersUI(List<Player> winners, List<CardData> board5, string suffix)
+    private void ShowWinnersUI(List<Player> winners, string suffix)
     {
         if (winnerText == null) return;
 
-        if (winners == null || winners.Count == 0)
-        {
-            winnerText.text = "No Winner";
-            winnerText.gameObject.SetActive(true);
-            return;
-        }
-
-        string cat = "";
-
-        if (board5 != null && board5.Count > 0)
-        {
-            var hole = winners[0].GetComponentsInChildren<Card>()
-                                 .Select(c => c.cardData)
-                                 .ToList();
-            if (hole.Count >= 2)
-            {
-                var hv = HandEvaluator.EvaluateBestFromHoleAndBoard(hole, board5);
-                cat = $"\n({hv.Category})";
-            }
-        }
-
         string names = string.Join(", ", winners.ConvertAll(w => w.name));
-        winnerText.text = $"🏆 {names}{cat}{suffix}";
+        winnerText.text = (winners.Count == 0 ? "No Winner" : $"🏆 {names}") + suffix;
         winnerText.gameObject.SetActive(true);
     }
 

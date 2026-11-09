@@ -121,7 +121,7 @@ public static class HandEvaluator
                 {
                     var flushRanks = kv.Value.Distinct().ToList();
                     flushRanks.Sort();
-                    if (flushRanks.Contains(14)) flushRanks.Add(1);
+                    if (flushRanks.Contains(14)) flushRanks.Insert(0, 1);
                     int sfHigh = FindStraightHigh(flushRanks);
                     if (sfHigh > 0)
                         return new HandValue(HandCategory.StraightFlush, new int[] { sfHigh });
@@ -141,7 +141,7 @@ public static class HandEvaluator
             // 스트레이트
             var uniques = ranks.Distinct().ToList();
             uniques.Sort();
-            if (uniques.Contains(14)) uniques.Add(1);
+            if (uniques.Contains(14)) uniques.Insert(0, 1);
             int stHigh = FindStraightHigh(uniques);
             if (stHigh > 0)
                 return new HandValue(HandCategory.Straight, new int[] { stHigh });
@@ -207,7 +207,7 @@ public static class HandEvaluator
             {
                 var flushRanks = kv.Value.Distinct().ToList();
                 flushRanks.Sort();
-                if (flushRanks.Contains(14)) flushRanks.Add(1);
+                if (flushRanks.Contains(14)) flushRanks.Insert(0, 1);
                 int sfHigh = FindStraightHigh(flushRanks);
                 if (sfHigh > 0)
                     return new HandValue(HandCategory.StraightFlush, new int[] { sfHigh });
@@ -252,7 +252,7 @@ public static class HandEvaluator
         // 스트레이트
         var uniques = ranks.Distinct().ToList();
         uniques.Sort();
-        if (uniques.Contains(14)) uniques.Add(1);
+        if (uniques.Contains(14)) uniques.Insert(0, 1);
         int stHigh = FindStraightHigh(uniques);
         if (stHigh > 0)
             return new HandValue(HandCategory.Straight, new int[] { stHigh });
